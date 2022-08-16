@@ -1,4 +1,4 @@
-package process
+package plib
 
 import (
 	"encoding/json"
@@ -9,24 +9,21 @@ import (
 	"strings"
 )
 
-type ProcessRelation struct {
-	Process Process
-	Parent  *ProcessRelation
-}
+const (
+  defaultProcDir = string(os.PathSeparator) + "proc"
+	cmdDir        = "cmdline"
+	statDir       = "stat"
+	exeDir        = "exe"
+	nullCharacter = "\x00"
+)
 
-type Process struct {
-	ID            int
-	CommandName   string
-	CommandPath   string
-	FlagsAndArgs  string
-	ParentProcess int
-	Stat          *ProcessStat
-}
+type LinuxInspector struct { }
 
-// ProcessStat is a representation of procfs's stat file.
+// ProcessStat is a representation of procfs's stat file in Linux hosts.
 // https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
 type ProcessStat struct {
-	ID              int    // pid
+  // ID of a process (pid)
+	ID              int
 	FileName        string // tcomm
 	State           string // state (R: Running, S: Sleeping, D: Sleeping and uninteruptable, Z: Zombie, T: Traced or stopped)
 	ParentID        int    // ppid
@@ -84,14 +81,6 @@ type ProcessStat struct {
 	ExitCode             int
 }
 
-const (
-	procDir       = string(os.PathSeparator) + "proc"
-	cmdDir        = "cmdline"
-	statDir       = "stat"
-	exeDir        = "exe"
-	nullCharacter = "\x00"
-)
-
 func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
 	//fmt.Printf("ID that entered was %d\n", rootPID)
 	*FullPIDList = append(*FullPIDList, rootPID)
@@ -133,7 +122,7 @@ func RunGetProcessForRelationship(name string) {
 		processRelations = append(processRelations, ProcessRelation{Process: processByID[pid]})
 	}
 
-	for i, _ := range processRelations {
+	for i := range processRelations {
 		if i == len(processRelations)-1 {
 			processRelations[i].Process.Stat = nil
 			break
@@ -147,7 +136,6 @@ func RunGetProcessForRelationship(name string) {
 
 	d, _ := json.Marshal(processRelations[0])
 	fmt.Println(string(d))
-	//fmt.Println(pidsInvolved)
 }
 
 func addRelativeProcess(ps *ProcessRelation) {
@@ -188,7 +176,7 @@ func RunGetProcesses() {
 // valid if it is a directory with a numeric name. An error is returned when
 // getPIDs is unable to read procfs.
 func getPIDs() ([]int, error) {
-	procDirs, err := os.ReadDir(procDir)
+	procDirs, err := os.ReadDir(defaultProcDir)
 	if err != nil {
 		return nil, err
 	}
@@ -227,7 +215,7 @@ func LoadProcessName(pid int) string {
 // TODO(joshrosso): Consider a more logic-based approach to name resolution
 // when root access is not possible.
 func LoadProcessPath(pid int) string {
-	exeLink, err := os.Readlink(filepath.Join(procDir, strconv.Itoa(pid), exeDir))
+	exeLink, err := os.Readlink(filepath.Join(defaultProcDir, strconv.Itoa(pid), exeDir))
 	if err != nil {
 		//fmt.Printf("WARN: Could not read the link at /proc/%d/exe\n", pid)
 	}
@@ -277,7 +265,7 @@ func GetProcesses() ([]Process, error) {
 // https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10.
 func LoadStat(pid int) ProcessStat {
 	ps := ProcessStat{}
-	stat, err := os.ReadFile(filepath.Join(procDir, strconv.Itoa(pid), statDir))
+	stat, err := os.ReadFile(filepath.Join(defaultProcDir, strconv.Itoa(pid), statDir))
 	if err != nil {
 		return ps
 	}
