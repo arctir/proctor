@@ -1,8 +1,13 @@
 package plib
 
+import (
+	"fmt"
+	"runtime"
+)
+
 type Inspector interface {
-  ListProcesses() []Process
-  GetProcess(qo ProcessQueryOptions) Process
+	ListProcesses() []Process
+	GetProcess(qo ProcessQueryOptions) Process
 }
 
 type ProcessQueryOptions struct {
@@ -21,4 +26,17 @@ type Process struct {
 	FlagsAndArgs  string
 	ParentProcess int
 	Stat          any
+}
+
+// NewInspector returns a an Inspector instance based on the host's operating
+// system. If the host's operating system cannot be detected or the operating
+// system is unsupported, an error is returned.
+func NewInspector() (Inspector, error) {
+	switch runtime.GOOS {
+  // TODO(joshrosso): Other target architectures
+	case "linux":
+		return &LinuxInspector{}, nil
+	}
+
+	return nil, fmt.Errorf("failed to create inspector because operating system %s is unsupported\n", runtime.GOOS)
 }

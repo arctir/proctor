@@ -17,7 +17,7 @@ const (
 	nullCharacter = "\x00"
 )
 
-type LinuxInspector struct { }
+type LinuxInspector struct{}
 
 // ProcessStat is a representation of procfs's stat file in Linux hosts.
 // https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
@@ -79,6 +79,16 @@ type ProcessStat struct {
 	StartEnvAddress      int
 	EndEnvAddress        int
 	ExitCode             int
+}
+
+// TODO(joshrosso)
+func (l *LinuxInspector)GetProcess(qo ProcessQueryOptions) Process {
+  return Process{}
+}
+
+// TODO(joshrosso)
+func (l *LinuxInspector) ListProcesses() []Process {
+  return []Process{}
 }
 
 func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
