@@ -10,11 +10,11 @@ import (
 )
 
 const (
-  defaultProcDir = string(os.PathSeparator) + "proc"
-	cmdDir        = "cmdline"
-	statDir       = "stat"
-	exeDir        = "exe"
-	nullCharacter = "\x00"
+	defaultProcDir = string(os.PathSeparator) + "proc"
+	cmdDir         = "cmdline"
+	statDir        = "stat"
+	exeDir         = "exe"
+	nullCharacter  = "\x00"
 )
 
 type LinuxInspector struct{}
@@ -22,7 +22,7 @@ type LinuxInspector struct{}
 // ProcessStat is a representation of procfs's stat file in Linux hosts.
 // https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10
 type ProcessStat struct {
-  // ID of a process (pid)
+	// ID of a process (pid)
 	ID              int
 	FileName        string // tcomm
 	State           string // state (R: Running, S: Sleeping, D: Sleeping and uninteruptable, Z: Zombie, T: Traced or stopped)
@@ -82,13 +82,31 @@ type ProcessStat struct {
 }
 
 // TODO(joshrosso)
-func (l *LinuxInspector)GetProcess(qo ProcessQueryOptions) Process {
-  return Process{}
+func (l *LinuxInspector) GetProcesses(qo ProcessQueryOptions) ([]Process, error) {
+	switch {
+	case qo.ProcessName != "":
+		p, err := GetProcessesByName(qo.ProcessName)
+		// safe to return p and err, always. We can expect p to be, at minimum, an
+		// empty slice of Process objects.
+		return p, err
+	case qo.ProcessID != 0:
+		// TODO(joshrosso)
+	}
+
+	p, err := GetProcesses()
+	// safe to return p and err, always. We can expect p to be, at minimum, an
+	// empty slice of Process objects.
+	return p, err
+
 }
 
 // TODO(joshrosso)
-func (l *LinuxInspector) ListProcesses() []Process {
-  return []Process{}
+func (l *LinuxInspector) ListProcesses() ([]Process, error) {
+	ps, err := GetProcesses()
+	if err != nil {
+		return nil, err
+	}
+	return ps, nil
 }
 
 func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
@@ -151,10 +169,14 @@ func RunGetProcessForRelationship(name string) {
 func addRelativeProcess(ps *ProcessRelation) {
 }
 
-func RunGetProcess(name string) {
+// GetProcessesByName looks up a process based on its name. In the case of
+// linux, this is done by TODO(joshrosso). An error is returned if process
+// lookup failed. If no process with the provided name is found, an empty slice
+// is returned.
+func GetProcessesByName(name string) ([]Process, error) {
 	ps, err := GetProcesses()
 	if err != nil {
-		panic(err)
+		return []Process{}, err
 	}
 	processByName := map[string]Process{}
 	for i := range ps {
@@ -164,10 +186,15 @@ func RunGetProcess(name string) {
 	}
 
 	if val, ok := processByName[name]; ok {
-		d, _ := json.Marshal(val)
-		fmt.Println(string(d))
+		// TODO(joshrosso): make it so multiple processes with the same name are returned.
+		//                  this can likely be accomplished with a map where the value is
+		//                  a list of pointers to Process instances.
+		ps := []Process{val}
+		return ps, nil
+		//d, _ := json.Marshal(val)
+		//fmt.Println(string(d))
 	} else {
-		fmt.Printf("No process named %s found.", name)
+		return []Process{}, nil
 	}
 
 }

@@ -6,11 +6,15 @@ import (
 )
 
 type Inspector interface {
-	ListProcesses() []Process
-	GetProcess(qo ProcessQueryOptions) Process
+	ListProcesses() ([]Process, error)
+	GetProcesses(qo ProcessQueryOptions) ([]Process, error)
 }
 
+// ProcessQueryOptions are used when looking up a process. The fields act as
+// filters that can be applied.
 type ProcessQueryOptions struct {
+  ProcessName string
+  ProcessID int
 }
 
 type ProcessRelation struct {
