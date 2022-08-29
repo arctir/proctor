@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/arctir/proctor/plib"
 	"github.com/spf13/cobra"
@@ -50,15 +49,11 @@ var treeCmd = &cobra.Command{
 	},
 }
 
+// SetupCommands adds the CLI commands to the proctor CLI.
 func SetupCommands() *cobra.Command {
 	proctorCmd.AddCommand(listCmd)
 	proctorCmd.AddCommand(getCmd)
 	proctorCmd.AddCommand(treeCmd)
-
-	if err := proctorCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
 
 	return proctorCmd
 }

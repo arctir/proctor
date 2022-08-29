@@ -6,6 +6,6 @@ help: #### Details how to build, install, package, and/or deploy.
 # Build options [start]
 
 build: ## create proctor binary at ./out/proctor. Uses host's OS and Arch.
-	go build -o ./out/proctor ./main.go
+	go build -o ./out/proctor ./proctor/main.go
 
 # Build targets [end]
