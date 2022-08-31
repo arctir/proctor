@@ -7,5 +7,13 @@ help: #### Details how to build, install, package, and/or deploy.
 
 build: ## create proctor binary at ./out/proctor. Uses host's OS and Arch.
 	go build -o ./out/proctor ./proctor/main.go
+	@printf $(green_start)"Built and saved proctor to ./out/proctor."$(green_end)
 
 # Build targets [end]
+
+# Makefile constants [start]
+
+green_start := "\033[1;32m"
+green_end = "\033[36m\033[0m\n"
+
+# Makefile constants [end]
