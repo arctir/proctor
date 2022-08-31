@@ -1,8 +1,9 @@
 package plib
 
 import (
-	"encoding/json"
+	"crypto/sha256"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,6 +16,8 @@ const (
 	statDir        = "stat"
 	exeDir         = "exe"
 	nullCharacter  = "\x00"
+	permDenied     = "PERM_DENIED"
+	statError      = "ERROR_READING_STAT"
 )
 
 type LinuxInspector struct{}
@@ -124,7 +127,7 @@ func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID
 	//fmt.Printf("FINAL: %s\n", FullPIDList)
 }
 
-func RunGetProcessForRelationship(name string) {
+func RunGetProcessForRelationship(name string) ProcessRelation {
 	ps, err := GetProcesses()
 	if err != nil {
 		panic(err)
@@ -162,8 +165,7 @@ func RunGetProcessForRelationship(name string) {
 		processRelations[i].Parent = &processRelations[i+1]
 	}
 
-	d, _ := json.Marshal(processRelations[0])
-	fmt.Println(string(d))
+	return processRelations[0]
 }
 
 func addRelativeProcess(ps *ProcessRelation) {
@@ -199,14 +201,14 @@ func GetProcessesByName(name string) ([]Process, error) {
 
 }
 
-func RunGetProcesses() {
+func RunGetProcesses() []Process {
 	ps, err := GetProcesses()
 	if err != nil {
+		//TODO(joshrosso): Deal with this.
 		panic(err)
 	}
 
-	d, _ := json.Marshal(ps)
-	fmt.Println(string(d))
+	return ps
 }
 
 // getPIDs returns every process ID known to procfs. A process ID is considered
@@ -234,13 +236,37 @@ func getPIDs() ([]int, error) {
 
 // LoadProcessName returns the name of the process for the provided PID. If the
 // name cannot be resolved, an empty string is returned.
-func LoadProcessName(pid int) string {
-	path := LoadProcessPath(pid)
+func LoadProcessName(pid int) (string, error) {
+	path, err := LoadProcessPath(pid)
+	if err != nil {
+		return "", err
+	}
 	dirs := strings.Split(path, string(os.PathSeparator))
 	if len(dirs) < 1 {
+		return "", nil
+	}
+	return dirs[len(dirs)-1], nil
+}
+
+// LoadProcessSHA evaluates the sha256 value of the binary.
+func LoadProcessSHA(path string) string {
+	if path == "" {
 		return ""
 	}
-	return dirs[len(dirs)-1]
+	f, err := os.Open(path)
+	if err != nil {
+		//TODO(joshrosso): fix this
+		panic(err)
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		//TODO(joshrosso): fix this
+		panic(err)
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // LoadProcessPath returns the path, or location, of the binary being executed
@@ -251,12 +277,12 @@ func LoadProcessName(pid int) string {
 //
 // TODO(joshrosso): Consider a more logic-based approach to name resolution
 // when root access is not possible.
-func LoadProcessPath(pid int) string {
+func LoadProcessPath(pid int) (string, error) {
 	exeLink, err := os.Readlink(filepath.Join(defaultProcDir, strconv.Itoa(pid), exeDir))
 	if err != nil {
-		//fmt.Printf("WARN: Could not read the link at /proc/%d/exe\n", pid)
+		return "", err
 	}
-	return exeLink
+	return exeLink, nil
 }
 
 // LoadProcessDetails introspects the process's directory in procfs to retrieve
@@ -265,15 +291,56 @@ func LoadProcessPath(pid int) string {
 // information or lack of access to data in procfs will result in missing
 // information in the generated returned Process.
 func LoadProcessDetails(pid int) Process {
-	name := LoadProcessName(pid)
-	path := LoadProcessPath(pid)
+	hasPerm := true
+	isK := false
+	var sha string
+	name, err := LoadProcessName(pid)
+
+	// when error is bubbled up, determine why to set name correctly
+	if err != nil {
+		switch {
+		case os.IsPermission(err):
+			name = permDenied
+			hasPerm = false
+		case os.IsNotExist(err):
+			stat, err := os.ReadFile(filepath.Join(defaultProcDir, strconv.Itoa(pid), statDir))
+			if err != nil {
+				//TODO(joshrosso): Clean this up.
+				panic(err)
+			}
+			//TODO(joshrosso): But does this handle nullCharacter?
+			parsedStats := strings.Split(string(stat), " ")
+			name = parsedStats[1]
+			isK = true
+		default:
+			name = "ERROR_UNKNOWN"
+		}
+
+	}
+	path, err := LoadProcessPath(pid)
+	//TODO(joshrosso): cleanup this logic.
+	if err != nil {
+		if os.IsPermission(err) {
+			path = permDenied
+			sha = permDenied
+		} else {
+			path = statError
+			sha = statError
+		}
+
+	} else {
+		sha = LoadProcessSHA(path)
+	}
 	stat := LoadStat(pid)
 
 	p := Process{
 		ID:            pid,
+		IsKernel:      isK,
+		HasPermission: hasPerm,
 		CommandName:   name,
 		CommandPath:   path,
 		ParentProcess: stat.ParentID,
+		BinarySHA:     sha,
 		Stat:          &stat,
 	}
 
@@ -291,7 +358,10 @@ func GetProcesses() ([]Process, error) {
 
 	procs := []Process{}
 	for _, pid := range pids {
-		procs = append(procs, LoadProcessDetails(pid))
+		p := LoadProcessDetails(pid)
+		if !p.IsKernel && p.HasPermission {
+			procs = append(procs, p)
+		}
 	}
 
 	return procs, nil
@@ -307,10 +377,6 @@ func LoadStat(pid int) ProcessStat {
 		return ps
 	}
 	parsedStats := strings.Split(string(stat), " ")
-	//	fmt.Printf("LOOKING UP PID %d\n", pid)
-	//for i, statVal := range parsedStats {
-	//		fmt.Printf("%d: %s\n", i, statVal)
-	//}
 	ps.ParentID, _ = strconv.Atoi(parsedStats[3])
 
 	for i, stat := range parsedStats {

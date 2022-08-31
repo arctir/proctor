@@ -13,8 +13,8 @@ type Inspector interface {
 // ProcessQueryOptions are used when looking up a process. The fields act as
 // filters that can be applied.
 type ProcessQueryOptions struct {
-  ProcessName string
-  ProcessID int
+	ProcessName string
+	ProcessID   int
 }
 
 type ProcessRelation struct {
@@ -29,6 +29,8 @@ type Process struct {
 	CommandPath   string
 	FlagsAndArgs  string
 	ParentProcess int
+	IsKernel      bool
+	HasPermission bool
 	Stat          any
 }
 
@@ -37,7 +39,7 @@ type Process struct {
 // system is unsupported, an error is returned.
 func NewInspector() (Inspector, error) {
 	switch runtime.GOOS {
-  // TODO(joshrosso): Other target architectures
+	// TODO(joshrosso): Other target architectures
 	case "linux":
 		return &LinuxInspector{}, nil
 	}
