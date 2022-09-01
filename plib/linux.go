@@ -84,6 +84,11 @@ type ProcessStat struct {
 	ExitCode             int
 }
 
+type ListOptions struct {
+	IncludeKernel           bool
+	IncludePermissionIssues bool
+}
+
 // TODO(joshrosso)
 func (l *LinuxInspector) ListProcesses() ([]Process, error) {
 	ps, err := GetProcesses()
@@ -320,21 +325,50 @@ func LoadProcessDetails(pid int) Process {
 // GetProcesses retrieves all the processes from procfs. It introspects
 // each process to gather data and returns a slice of Processes. An error is
 // returned when GetProcesses is unable to interact with procfs.
-func GetProcesses() ([]Process, error) {
+func GetProcesses(opts ...ListOptions) ([]Process, error) {
+	opt := MergeOptions(opts)
 	pids, err := getPIDs()
 	if err != nil {
 		return nil, err
 	}
 
 	procs := []Process{}
+
 	for _, pid := range pids {
 		p := LoadProcessDetails(pid)
-		if !p.IsKernel && p.HasPermission {
+		switch {
+		// filter out kernel processes and permission issues
+		case !opt.IncludeKernel && !opt.IncludePermissionIssues:
+			if !p.IsKernel && p.HasPermission {
+				procs = append(procs, p)
+			}
+		// filter out permission issues, include kernel processes
+		case opt.IncludeKernel && !opt.IncludePermissionIssues:
+			if p.HasPermission {
+				procs = append(procs, p)
+			}
+		// filter out kernel processes, include permission issues
+		case !opt.IncludeKernel && opt.IncludePermissionIssues:
+			if !p.IsKernel {
+				procs = append(procs, p)
+			}
+		// include all processes
+		case opt.IncludeKernel && opt.IncludePermissionIssues:
 			procs = append(procs, p)
 		}
 	}
 
 	return procs, nil
+}
+
+func MergeOptions(opts []ListOptions) ListOptions {
+	// default case when opts are empty
+	if len(opts) < 1 {
+		return ListOptions{}
+	}
+	// TODO(joshrosso): Need to do actual merge logic rather than perferring
+	// first option
+	return opts[0]
 }
 
 // LoadStat translates fields in the stat file (/proc/${PID}/stat) into

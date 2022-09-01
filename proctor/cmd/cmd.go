@@ -40,7 +40,7 @@ const (
 
 type ProctorOpts struct {
 	outType          OutputType
-	filterKernel     bool
+	includeKernel    bool
 	includePermIssue bool
 }
 
@@ -141,9 +141,18 @@ func AssembleTreeForProcess(processName string, opts ProctorOpts) {
 }
 
 func AssembleListProcesses(opts ProctorOpts) {
+	plibOpts := plib.ListOptions{
+		IncludeKernel:           opts.includeKernel,
+		IncludePermissionIssues: opts.includePermIssue,
+	}
+
+	ps, err := plib.GetProcesses(plibOpts)
+	if err != nil {
+		// TODO(joshrosso): Make this better.
+		panic(err.Error())
+	}
+
 	var out []byte
-	var err error
-	ps := plib.RunGetProcesses()
 	switch opts.outType {
 	case jsonOut:
 		out, err = json.Marshal(ps)
@@ -203,7 +212,7 @@ func newOptions(fs *pflag.FlagSet) ProctorOpts {
 
 	return ProctorOpts{
 		outType:          ot,
-		filterKernel:     fko,
+		includeKernel:    fko,
 		includePermIssue: ipi,
 	}
 }
