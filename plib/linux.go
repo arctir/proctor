@@ -99,22 +99,18 @@ func (l *LinuxInspector) ListProcesses() ([]Process, error) {
 }
 
 func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
-	//fmt.Printf("ID that entered was %d\n", rootPID)
 	*FullPIDList = append(*FullPIDList, rootPID)
 	parentID := pidlist[rootPID].ParentProcess
-	//time.Sleep(1 * time.Second)
-	//fmt.Printf("Parent ID was %d\n", parentID)
 	if parentID > 1 {
 		resolvePIDRelationship(FullPIDList, pidlist, parentID)
 	}
 	if parentID == 1 {
 		*FullPIDList = append(*FullPIDList, 1)
 	}
-	//fmt.Printf("FINAL: %s\n", FullPIDList)
 }
 
-func RunGetProcessForRelationship(name string) ProcessRelation {
-	ps, err := GetProcesses()
+func RunGetProcessForRelationship(name string, opts ...ListOptions) ProcessRelation {
+	ps, err := GetProcesses(opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -161,9 +157,9 @@ func addRelativeProcess(ps *ProcessRelation) {
 // linux, this is done by TODO(joshrosso). An error is returned if process
 // lookup failed. If no process with the provided name is found, an empty slice
 // is returned.
-func GetProcessesByName(name string) ([]Process, error) {
+func GetProcessesByName(name string, opts ...ListOptions) ([]Process, error) {
 	results := []Process{}
-	ps, err := GetProcesses()
+	ps, err := GetProcesses(opts...)
 	if err != nil {
 		return []Process{}, err
 	}
@@ -200,7 +196,6 @@ func getPIDs() ([]int, error) {
 		// When a directory name is not [^0-9], its not a process and is skipped.
 		pid, err := strconv.Atoi(p.Name())
 		if err != nil {
-			//fmt.Printf("WARN: Omitting proc dir entry %s", p.Name())
 			break
 		}
 		pids = append(pids, pid)

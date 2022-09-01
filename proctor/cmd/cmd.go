@@ -26,6 +26,8 @@ func init() {
 
 	// permission filter
 	listCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
+	treeCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
+	getCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
 }
 
 type OutputType int
@@ -100,8 +102,13 @@ func SetupCommands() *cobra.Command {
 }
 
 func AssembleGetProcesses(processName string, opts ProctorOpts) {
+	plibOpts := plib.ListOptions{
+		IncludeKernel:           opts.includeKernel,
+		IncludePermissionIssues: opts.includePermIssue,
+	}
+
 	var out []byte
-	ps, err := plib.GetProcessesByName(processName)
+	ps, err := plib.GetProcessesByName(processName, plibOpts)
 	// TODO(joshrosso): deal with panic
 	if err != nil {
 		panic(err.Error())
@@ -124,7 +131,12 @@ func AssembleGetProcesses(processName string, opts ProctorOpts) {
 // AssembleTreeForProcess derives a tree of ancestor processes by introspecting
 // TODO(joshrosso): move away from outputOption type string
 func AssembleTreeForProcess(processName string, opts ProctorOpts) {
-	psRelationships := plib.RunGetProcessForRelationship(processName)
+	plibOpts := plib.ListOptions{
+		IncludeKernel:           opts.includeKernel,
+		IncludePermissionIssues: opts.includePermIssue,
+	}
+
+	psRelationships := plib.RunGetProcessForRelationship(processName, plibOpts)
 	var out []byte
 	var err error
 	switch opts.outType {
