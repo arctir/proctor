@@ -66,7 +66,7 @@ var getCmd = &cobra.Command{
 			fmt.Println("Please enter a process name")
 			return
 		}
-		plib.GetProcessesByName(args[0])
+		AssembleGetProcesses(args[0], newOptions(cmd.Flags()))
 	},
 }
 
@@ -97,6 +97,28 @@ func SetupCommands() *cobra.Command {
 	proctorCmd.AddCommand(treeCmd)
 
 	return proctorCmd
+}
+
+func AssembleGetProcesses(processName string, opts ProctorOpts) {
+	var out []byte
+	ps, err := plib.GetProcessesByName(processName)
+	// TODO(joshrosso): deal with panic
+	if err != nil {
+		panic(err.Error())
+	}
+
+	switch opts.outType {
+	case jsonOut:
+		out, err = json.Marshal(ps)
+		// TODO(joshrosso): Make this better.
+		if err != nil {
+			panic(err.Error())
+		}
+	default:
+		out = createGetTable(ps)
+	}
+
+	fmt.Printf("%s", out)
 }
 
 // AssembleTreeForProcess derives a tree of ancestor processes by introspecting

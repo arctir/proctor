@@ -7,7 +7,6 @@ import (
 
 type Inspector interface {
 	ListProcesses() ([]Process, error)
-	GetProcesses(qo ProcessQueryOptions) ([]Process, error)
 }
 
 // ProcessQueryOptions are used when looking up a process. The fields act as

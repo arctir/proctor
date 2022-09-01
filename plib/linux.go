@@ -85,25 +85,6 @@ type ProcessStat struct {
 }
 
 // TODO(joshrosso)
-func (l *LinuxInspector) GetProcesses(qo ProcessQueryOptions) ([]Process, error) {
-	switch {
-	case qo.ProcessName != "":
-		p, err := GetProcessesByName(qo.ProcessName)
-		// safe to return p and err, always. We can expect p to be, at minimum, an
-		// empty slice of Process objects.
-		return p, err
-	case qo.ProcessID != 0:
-		// TODO(joshrosso)
-	}
-
-	p, err := GetProcesses()
-	// safe to return p and err, always. We can expect p to be, at minimum, an
-	// empty slice of Process objects.
-	return p, err
-
-}
-
-// TODO(joshrosso)
 func (l *LinuxInspector) ListProcesses() ([]Process, error) {
 	ps, err := GetProcesses()
 	if err != nil {
@@ -176,29 +157,18 @@ func addRelativeProcess(ps *ProcessRelation) {
 // lookup failed. If no process with the provided name is found, an empty slice
 // is returned.
 func GetProcessesByName(name string) ([]Process, error) {
+	results := []Process{}
 	ps, err := GetProcesses()
 	if err != nil {
 		return []Process{}, err
 	}
-	processByName := map[string]Process{}
 	for i := range ps {
-		if ps[i].CommandName != "" {
-			processByName[ps[i].CommandName] = ps[i]
+		if ps[i].CommandName == name {
+			results = append(results, ps[i])
 		}
 	}
 
-	if val, ok := processByName[name]; ok {
-		// TODO(joshrosso): make it so multiple processes with the same name are returned.
-		//                  this can likely be accomplished with a map where the value is
-		//                  a list of pointers to Process instances.
-		ps := []Process{val}
-		return ps, nil
-		//d, _ := json.Marshal(val)
-		//fmt.Println(string(d))
-	} else {
-		return []Process{}, nil
-	}
-
+	return results, nil
 }
 
 func RunGetProcesses() []Process {
