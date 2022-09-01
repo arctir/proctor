@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/arctir/proctor/cmd"
+	"github.com/arctir/proctor/proctor/cmd"
 )
 
 func main() {
