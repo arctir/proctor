@@ -137,12 +137,8 @@ func RunGetProcessForRelationship(name string, opts ...ListOptions) ProcessRelat
 
 	for i := range processRelations {
 		if i == len(processRelations)-1 {
-			processRelations[i].Process.Stat = nil
 			break
 		}
-
-		// temp cleaner
-		processRelations[i].Process.Stat = nil
 
 		processRelations[i].Parent = &processRelations[i+1]
 	}
@@ -376,14 +372,114 @@ func LoadStat(pid int) ProcessStat {
 		return ps
 	}
 	parsedStats := strings.Split(string(stat), " ")
-	ps.ParentID, _ = strconv.Atoi(parsedStats[3])
 
 	for i, stat := range parsedStats {
+		//fmt.Printf("stat %d: %s\n", i, stat)
 		switch i {
 		case 0:
 			ps.ID, _ = strconv.Atoi(stat)
 		case 1:
 			ps.FileName = stat
+		case 2:
+			ps.State = stat
+		case 3:
+			ps.ParentID, _ = strconv.Atoi(stat)
+		case 4:
+			ps.Group, _ = strconv.Atoi(stat)
+		case 5:
+			ps.SessionID, _ = strconv.Atoi(stat)
+		case 6:
+			ps.TTY, _ = strconv.Atoi(stat)
+		case 7:
+			ps.TTYProcessGroup, _ = strconv.Atoi(stat)
+		case 8:
+			ps.TaskFlags = stat
+		case 9:
+			ps.MinorFaultQuantity, _ = strconv.Atoi(stat)
+		case 10:
+			ps.MinorFaultWithChildQuantity, _ = strconv.Atoi(stat)
+		case 11:
+			ps.MajorFaultQuantity, _ = strconv.Atoi(stat)
+		case 12:
+			ps.MajorFaultWithChildQuantity, _ = strconv.Atoi(stat)
+		case 13:
+			ps.UTime, _ = strconv.Atoi(stat)
+		case 14:
+			ps.KernalTime, _ = strconv.Atoi(stat)
+		case 15:
+			ps.UTimeWithChild, _ = strconv.Atoi(stat)
+		case 16:
+			ps.KernalTimeWithChild, _ = strconv.Atoi(stat)
+		case 17:
+			ps.Priority, _ = strconv.Atoi(stat)
+		case 18:
+			ps.Nice, _ = strconv.Atoi(stat)
+		case 19:
+			ps.ThreadQuantity, _ = strconv.Atoi(stat)
+		case 20:
+			ps.ItRealValue, _ = strconv.Atoi(stat)
+		case 21:
+			ps.StartTime, _ = strconv.Atoi(stat)
+		case 22:
+			ps.VirtualMemSize, _ = strconv.Atoi(stat)
+		case 23:
+			ps.ResidentSetMemSize, _ = strconv.Atoi(stat)
+		case 24:
+			ps.RSSByteLimit, _ = strconv.Atoi(stat)
+		case 25:
+			ps.StartCode, _ = strconv.Atoi(stat)
+		case 26:
+			ps.EndCode, _ = strconv.Atoi(stat)
+		case 27:
+			ps.StartStack, _ = strconv.Atoi(stat)
+		case 28:
+			ps.ESP, _ = strconv.Atoi(stat)
+		case 29:
+			ps.EIP, _ = strconv.Atoi(stat)
+		case 30:
+			ps.PendingSignals, _ = strconv.Atoi(stat)
+		case 31:
+			ps.BlockedSignals, _ = strconv.Atoi(stat)
+		case 32:
+			ps.IgnoredSignals, _ = strconv.Atoi(stat)
+		case 33:
+			ps.CaughtSignals, _ = strconv.Atoi(stat)
+		case 34:
+			ps.PlaceHolder1, _ = strconv.Atoi(stat)
+		case 35:
+			ps.PlaceHolder2, _ = strconv.Atoi(stat)
+		case 36:
+			ps.PlaceHolder3, _ = strconv.Atoi(stat)
+		case 37:
+			ps.ExitSignal, _ = strconv.Atoi(stat)
+		case 38:
+			ps.CPU, _ = strconv.Atoi(stat)
+		case 39:
+			ps.RealtimePriority, _ = strconv.Atoi(stat)
+		case 40:
+			ps.SchedulingPolicy, _ = strconv.Atoi(stat)
+		case 41:
+			ps.TimeSpentOnBlockIO, _ = strconv.Atoi(stat)
+		case 42:
+			ps.GuestTime, _ = strconv.Atoi(stat)
+		case 43:
+			ps.GuestTimeWithChild, _ = strconv.Atoi(stat)
+		case 44:
+			ps.StartDataAddress, _ = strconv.Atoi(stat)
+		case 45:
+			ps.EndDataAddress, _ = strconv.Atoi(stat)
+		case 46:
+			ps.HeapExpansionAddress, _ = strconv.Atoi(stat)
+		case 47:
+			ps.StartCMDAddress, _ = strconv.Atoi(stat)
+		case 48:
+			ps.EndCMDAddress, _ = strconv.Atoi(stat)
+		case 49:
+			ps.StartEnvAddress, _ = strconv.Atoi(stat)
+		case 50:
+			ps.EndEnvAddress, _ = strconv.Atoi(stat)
+		case 51:
+			ps.ExitCode, _ = strconv.Atoi(stat)
 		}
 
 	}

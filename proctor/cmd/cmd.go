@@ -172,6 +172,7 @@ func AssembleListProcesses(opts ProctorOpts) {
 		if err != nil {
 			panic(err.Error())
 		}
+		fmt.Printf("%s", out)
 	default:
 		out = createGetTable(ps)
 		fmt.Printf("%s", out)
