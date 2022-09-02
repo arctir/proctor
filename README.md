@@ -19,6 +19,8 @@ A CLI for introspecting what's running on a host.
 	* `proctor ls`: list all processes.
 	* `proctor tree [process-name]`: list a process's relationship.
 	* `proctor get -o json [process-name]`: get details on a process.
+	* `proctor fp [process-name]`: Returns a checksum based on a process's relationships.
+		> By default, it uses the hashes of its and all parent process binaries.
 	* `proctor help`: list commands.
 
 ## Why Proctor

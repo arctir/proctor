@@ -1,3 +1,5 @@
+help: help-text #### Details how to build, install, package, and/or deploy.
+
 ###################
 ## Build targets ##
 ###################
@@ -14,7 +16,7 @@ install: ## Creates a proctor binary and installs it to $GOBIN.
 ## Help targets ##
 ##################
 
-help: #### Details how to build, install, package, and/or deploy.
+help-text:
 	@awk 'BEGIN {FS = ":.*## "; printf "\nTargets:\n"} /^[a-zA-Z_-]+:.*?#### / { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.* ## "; printf "\n  \033[1;32mDevelopment\033[36m\033[0m\n"} /^[a-zA-Z_-]+:.*? ## / { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 	@awk 'BEGIN {FS = ":.* ### "; printf "\n  \033[1;32mRelease\033[36m\033[0m\n"} /^[a-zA-Z_-]+:.*? ### / { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
