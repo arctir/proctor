@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -85,10 +87,24 @@ var treeCmd = &cobra.Command{
 }
 
 var listCmd = &cobra.Command{
-	Use:   "ls",
-	Short: "List all available processes and their details.",
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all available processes and their details.",
 	Run: func(cmd *cobra.Command, args []string) {
 		AssembleListProcesses(newOptions(cmd.Flags()))
+	},
+}
+
+var fpCmd = &cobra.Command{
+	Use:     "finger-print",
+	Aliases: []string{"fp"},
+	Short:   "Returns a checksum (SHA256) based on a process's relationships. By default, it uses the hashes of its and all parent process binaries.",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 1 {
+			fmt.Println("Please enter a process name")
+			return
+		}
+		AssembleFpProcesses(args[0], newOptions(cmd.Flags()))
 	},
 }
 
@@ -97,6 +113,7 @@ func SetupCommands() *cobra.Command {
 	proctorCmd.AddCommand(listCmd)
 	proctorCmd.AddCommand(getCmd)
 	proctorCmd.AddCommand(treeCmd)
+	proctorCmd.AddCommand(fpCmd)
 
 	return proctorCmd
 }
@@ -125,7 +142,47 @@ func AssembleGetProcesses(processName string, opts ProctorOpts) {
 		out = createGetTable(ps)
 	}
 
-	fmt.Printf("%s", out)
+	fmt.Printf("%s\n", out)
+}
+
+func AssembleFpProcesses(processName string, opts ProctorOpts) {
+	plibOpts := plib.ListOptions{
+		IncludeKernel:           opts.includeKernel,
+		IncludePermissionIssues: opts.includePermIssue,
+	}
+
+	psRelationships := plib.RunGetProcessForRelationship(processName, plibOpts)
+	fp, err := CreateFingerPrint(psRelationships)
+	if err != nil {
+		// TODO(joshrosso): just temporary for POC. Design how to really
+		// bubble up errors at some point.
+		fmt.Printf("couldn't create fingerprint: %s", err.Error())
+		return
+	}
+	fmt.Printf("%s\n", fp)
+}
+
+func CreateFingerPrint(pr plib.ProcessRelation) (string, error) {
+	combinedHashes := ""
+	prte := pr
+
+	for {
+		if !prte.Process.HasPermission {
+			return "", fmt.Errorf("Missing permissions for all binary checksums. Try using sudo?\n")
+		}
+		if prte.Process.BinarySHA == "" {
+			return "", fmt.Errorf("An unexpected error occured where the binary was missing its SHA.\n")
+		}
+		combinedHashes += prte.Process.BinarySHA
+
+		if prte.Parent == nil {
+			break
+		}
+		prte = *prte.Parent
+	}
+	fp := sha256.Sum256([]byte(combinedHashes))
+
+	return hex.EncodeToString(fp[:]), nil
 }
 
 // AssembleTreeForProcess derives a tree of ancestor processes by introspecting
@@ -149,7 +206,7 @@ func AssembleTreeForProcess(processName string, opts ProctorOpts) {
 	default:
 		out = createTreeTable(psRelationships)
 	}
-	fmt.Printf("%s", out)
+	fmt.Printf("%s\n", out)
 }
 
 func AssembleListProcesses(opts ProctorOpts) {
@@ -172,10 +229,10 @@ func AssembleListProcesses(opts ProctorOpts) {
 		if err != nil {
 			panic(err.Error())
 		}
-		fmt.Printf("%s", out)
+		fmt.Printf("%s\n", out)
 	default:
 		out = createGetTable(ps)
-		fmt.Printf("%s", out)
+		fmt.Printf("%s\n", out)
 	}
 }
 
