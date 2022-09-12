@@ -33,9 +33,9 @@ a runtime level.
 
 ## How it works
 
-Under the hood, proctor leverages our library plib, which evolving into a
-operating-system agnostic way to expose details of the processes on a given
-introspects procfs on Linux hosts. Over time, this will expand to:
+Under the hood, proctor leverages our library plib, which is evolving into an
+operating-system agnostic method to expose details of the processes.
+Currently it introspects procfs on Linux hosts. Over time, this will expand to:
 
 * Windows
 * FreeBSD
