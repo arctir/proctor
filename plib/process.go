@@ -1,3 +1,5 @@
+// plib is Arctir's process library. This library is used to gather process
+// details across a variety of operating systems.
 package plib
 
 import (
@@ -33,9 +35,7 @@ type Process struct {
 	Stat          any
 }
 
-// NewInspector returns a an Inspector instance based on the host's operating
-// system. If the host's operating system cannot be detected or the operating
-// system is unsupported, an error is returned.
+// NewInspector returns a an Inspector instance based on the host's operating system. If the host's operating system cannot be detected or the operating system is unsupported, an error is returned.
 func NewInspector() (Inspector, error) {
 	switch runtime.GOOS {
 	// TODO(joshrosso): Other target architectures
