@@ -32,11 +32,16 @@ func TestLoadProcesses(t *testing.T) {
 
 	// verify an error is returned when the location of procfs doesn't exist
 	badProcFsPath := filepath.Join("hack", "fake", "path")
-	config := LinuxInspectorConfig{
-		ProcfsFilePath: badProcFsPath,
-		CacheFilePath:  cacheFp,
+	config := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: badProcFsPath,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li := NewLinuxInspector(config)
+	li, err := newLinuxInspector(config)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	err = li.LoadProcesses()
 	if err == nil {
 		t.Logf("error was expected since procfs (%s) is not a real location. However no error was returned.", badProcFsPath)
@@ -44,11 +49,16 @@ func TestLoadProcesses(t *testing.T) {
 	}
 
 	// verify no error is returned when the procfs location is valid
-	config2 := LinuxInspectorConfig{
-		ProcfsFilePath: procFp,
-		CacheFilePath:  cacheFp,
+	config2 := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: procFp,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li2 := NewLinuxInspector(config2)
+	li2, err := newLinuxInspector(config2)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	err = li2.LoadProcesses()
 	if err != nil {
 		t.Logf("error unexpectadly returned when the procfs location (%s) and data was valid. error from call: %s", procFp, err)
@@ -87,11 +97,16 @@ func TestClearProcessCache(t *testing.T) {
 	defer cleanTestData()
 
 	// run load LoadProcessess
-	config := LinuxInspectorConfig{
-		ProcfsFilePath: procFp,
-		CacheFilePath:  cacheFp,
+	config := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: procFp,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li := NewLinuxInspector(config)
+	li, err := newLinuxInspector(config)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	err = li.LoadProcesses()
 	if err != nil {
 		t.Logf("error unexpectadly returned when the procfs location (%s) and data was valid. error from call: %s", procFp, err)
@@ -136,11 +151,16 @@ func TestGetProcesses(t *testing.T) {
 	defer cleanTestData()
 
 	// run load LoadProcessess
-	config := LinuxInspectorConfig{
-		ProcfsFilePath: procFp,
-		CacheFilePath:  cacheFp,
+	config := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: procFp,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li := NewLinuxInspector(config)
+	li, err := newLinuxInspector(config)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	ps, err := li.GetProcesses()
 	if err != nil {
 		t.Fatalf("failed retrieving processes: %s", err)
@@ -186,11 +206,16 @@ func TestGetProcessesFromMemory(t *testing.T) {
 	defer cleanTestData()
 
 	// run load LoadProcessess
-	config := LinuxInspectorConfig{
-		ProcfsFilePath: procFp,
-		CacheFilePath:  cacheFp,
+	config := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: procFp,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li := NewLinuxInspector(config)
+	li, err := newLinuxInspector(config)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	err = li.LoadProcesses()
 	if err != nil {
 		t.Logf("error unexpectadly returned when the procfs location (%s) and data was valid. error from call: %s", procFp, err)
@@ -251,11 +276,16 @@ func TestGetProcessesFromFileCache(t *testing.T) {
 	defer cleanTestData()
 
 	// run load LoadProcessess
-	config := LinuxInspectorConfig{
-		ProcfsFilePath: procFp,
-		CacheFilePath:  cacheFp,
+	config := InspectorConfig{
+		LinuxConfig: LinuxInspectorConfig{
+			ProcfsFilePath: procFp,
+		},
+		CacheFilePath: cacheFp,
 	}
-	li := NewLinuxInspector(config)
+	li, err := newLinuxInspector(config)
+	if err != nil {
+		t.Fatalf("error, failed creating a linux inspector: %s", err)
+	}
 	err = li.LoadProcesses()
 	if err != nil {
 		t.Logf("error unexpectadly returned when the procfs location (%s) and data was valid. error from call: %s", procFp, err)

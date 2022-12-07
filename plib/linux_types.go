@@ -1,23 +1,29 @@
 package plib
 
+// LinuxInspector is the Linux implementation of inspector for loading,
+// caching, and returning all process information available. It does this by
+// reading the [process virtual filesystem] (procfs) and getting information
+// from various files, such as stat.
+//
+// It is not recommended you a LinuxInspector directly, instead use the
+// [NewInspector] constructor which will ensure configuration and defaults are
+// respected.
+//
+// [process virtual filesystem]: https://docs.kernel.org/filesystems/proc.html
 type LinuxInspector struct {
-	LinuxInspectorConfig
+	InspectorConfig
 	ps Processes
 }
 
+// LinuxInspectorConfig can be used to set Linux-specific settings when
+// creating an inspector. This config should be embedded into a
+// [InspectorConfig] struct as the OSSpecificConfig value.
 type LinuxInspectorConfig struct {
 	// The location on the filesystem where the virtual filesystem (procfs) can
 	// be found. By default, this is set to /proc. Unless you are writing tests
 	// or operating a very-customized Linux box, you probably should not set
 	// this.
 	ProcfsFilePath string
-	// The location on the filesystem where process details can be cached. By
-	// default this will be set to $XDG_DATA_HOME/proctor/proc.cache. Unless you
-	// are writing tests, you probably should not set this value.
-	CacheFilePath string
-	// Whether an existing cache should be ignored thus retrieving all process's
-	// from the operating system's API(s).
-	IgnoreCache bool
 }
 
 // ProcessStat is a representation of procfs's stat file in Linux hosts.
@@ -32,7 +38,7 @@ type ProcessStat struct {
 	// [prctl](https://man7.org/linux/man-pages/man2/prctl.2.html).
 	// Also known as tcomm
 	FileName string
-	// A character that reflects the state of the process.
+	// A character that reflects:SchedulingPolicy the state of the process.
 	// R: The process is currently running.
 	// S: The process is sleeping (waiting for an event to occur).
 	// D: The process is in uninterruptible sleep (usually waiting for I/O to complete).

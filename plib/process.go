@@ -103,11 +103,10 @@ type InspectorConfig struct {
 	// Whether an existing cache should be ignored thus retrieving all process's
 	// from the operating system's API(s).
 	IgnoreCache bool
-	// OSSpecificConfig enables you to provide specific settings that are only
-	// relevant to a specific Inspector implementation. For example, if you
-	// wanted to provide Linux-specific provide configuration, you could setup a
-	// [LinuxInspectorConfig] and place it here.
-	OSSpecificConfig any
+	// LinuxConfig is used for Linux-specific configuration around inspector
+	// behavior. This field is only respected when creating an inspector to
+	// operate on Linux.
+	LinuxConfig LinuxInspectorConfig
 }
 
 // NewInspector returns an Inspector instance based on the host's operating
@@ -127,9 +126,9 @@ func NewInspector() (Inspector, error) {
 	)
 }
 
-// GetCacheLocation returns the location where process details can be cached.
+// GetDefaultCacheLocation returns the location where process details can be cached.
 // This will resolve to the caller's equivalent of
 // $XDG_DATA_HOME/CacheDirName/CacheFileName.
-func GetCacheLocation() string {
+func GetDefaultCacheLocation() string {
 	return filepath.Join(xdg.DataHome, CacheDirName, CacheFileName)
 }

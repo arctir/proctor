@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-// NewLinuxInspector takes an optional [LinuxInspectorConfig] and returns a
+// newLinuxInspector takes an optional [LinuxInspectorConfig] and returns a
 // configured LinuxInspector, which can be used to operator on processes with
 // functions like [LinuxInspector.GetProcesses].
 //
@@ -21,31 +21,49 @@ import (
 //
 // For any required confiuration not specified in the opts argument, including
 // if opts is nil, defaults will be set.
-func NewLinuxInspector(opts ...LinuxInspectorConfig) LinuxInspector {
-	var config LinuxInspectorConfig
+func newLinuxInspector(opts ...InspectorConfig) (*LinuxInspector, error) {
+	var config InspectorConfig
 	// if opts was passed, used the last indexed argument
 	if len(opts) > 0 {
 		config = opts[len(opts)-1]
 	}
 
-	// TODO(joshrosso): Validate the config details
+	li := &LinuxInspector{
+		InspectorConfig: config,
+	}
 
-	return LinuxInspector{
-		LinuxInspectorConfig: config,
+	// set defaults to any empty fields that are required or have inadequate zero
+	// values.
+	setLinuxInspectorDefaults(li)
+
+	return li, nil
+}
+
+// setLinuxInspectorDefaults takes a LinuxInspector instance and finds any required
+// fields that aren't set to add defaults accordingly.
+func setLinuxInspectorDefaults(li *LinuxInspector) {
+	// if proc path isn't set, set it to /proc
+	if li.LinuxConfig.ProcfsFilePath == "" {
+		li.LinuxConfig.ProcfsFilePath = defaultProcDir
+	}
+
+	// if cache location isn't set it to ${XDG_DATA_HOME}/.local/share/proctor
+	if li.CacheFilePath == "" {
+		li.CacheFilePath = GetDefaultCacheLocation()
 	}
 }
 
 func (l *LinuxInspector) LoadProcesses() error {
 	// Also reset the reference to in-memory cache of processes
 	l.ps = Processes{}
-	ps, err := getPIDsFromProcfs(l.ProcfsFilePath)
+	ps, err := getPIDsFromProcfs(l.LinuxConfig.ProcfsFilePath)
 	if err != nil {
 		return err
 	}
 
 	// for each pid, load its data
 	for _, p := range ps {
-		loadedProcess := LoadProcessStat(l.ProcfsFilePath, p)
+		loadedProcess := LoadProcessStat(l.LinuxConfig.ProcfsFilePath, p)
 		l.ps[p] = &loadedProcess
 	}
 
