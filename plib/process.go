@@ -10,7 +10,8 @@ import (
 	"github.com/adrg/xdg"
 )
 
-// plib defaults
+// Default settings used throughout plib when not overridden in an
+// [InspectorConfig].
 const (
 	// The name directory containing the cache file. Note the base
 	CacheDirName = "proctor"
@@ -18,14 +19,13 @@ const (
 	CacheFileName = "proc.cache"
 )
 
-// Process is an operating system's representation of execution, typically
-// referred to as a process. Details available about processes vary between
-// operating systems. As such, Process contains multiple common fields that are
-// resolvable in most operating systems and a field for operating
-// system-specific details. While this value can be any type, the Type field in
-// Process can be used to determine which operating system the process
-// origniated from, which can then be used to inform casting of the interface
-// (any) to a concrete type.
+// Process is an operating system's representation of execution. Details
+// available about processes vary between operating systems. As such, Process
+// contains multiple common fields that are resolvable in most operating
+// systems and a field for operating system-specific details. While this value
+// can be any type, the Type field in Process can be used to determine which
+// operating system the process origniated from, which can then be used to
+// inform casting of the interface (any) to a concrete type.
 type Process struct {
 	// The process's numeric identifier. On *nix, this is the pid.
 	ID int
@@ -67,6 +67,8 @@ type Processes map[int]*Process
 // Inspector is able to load, cache, and return all the process information
 // available to the user on an operating system. Each implementation represents
 // a unique operating system.
+//
+// For an example, review the [LinuxInspector] implementation.
 type Inspector interface {
 	// LoadProcesses gathers all the available process information from the host
 	// using its available API(s). For example, on a Linux host, LoadProcesses
@@ -134,9 +136,11 @@ func NewInspector(opts ...InspectorConfig) (Inspector, error) {
 	)
 }
 
-// GetDefaultCacheLocation returns the location where process details can be cached.
-// This will resolve to the caller's equivalent of
-// $XDG_DATA_HOME/CacheDirName/CacheFileName.
+// GetDefaultCacheLocation returns the location where process details can be
+// cached. This will resolve to the caller's equivalent of
+// $XDG_DATA_HOME/CacheDirName/CacheFileName. This is used as a default when a
+// client does not specify an alternative cache location based on
+// [InspectorConfig].
 func GetDefaultCacheLocation() string {
 	return filepath.Join(xdg.DataHome, CacheDirName, CacheFileName)
 }

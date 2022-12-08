@@ -8,13 +8,14 @@ import "os"
 type Signal int
 
 const (
-	defaultProcDir = string(os.PathSeparator) + "proc"
-	cmdDir         = "cmdline"
-	statDir        = "stat"
-	exeDir         = "exe"
-	nullCharacter  = "\x00"
-	permDenied     = "PERM_DENIED"
-	statError      = "ERROR_READING_STAT"
+	defaultProcDir   = string(os.PathSeparator) + "proc"
+	linuxProcessType = "linux"
+	cmdDir           = "cmdline"
+	statDir          = "stat"
+	exeDir           = "exe"
+	nullCharacter    = "\x00"
+	permDenied       = "PERM_DENIED"
+	statError        = "ERROR_READING_STAT"
 )
 
 const (

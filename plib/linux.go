@@ -53,6 +53,16 @@ func setLinuxInspectorDefaults(li *LinuxInspector) {
 	}
 }
 
+// LoadProcesses gathers all the available process information using [procfs].
+// Upon successful retreival, that data is stored in 2 places:
+//
+//  1. Within l.ps, which is an in-memory representation of processes stored within the struct.
+//  2. Within the cache file, which is at the location specified by [InspectorConfig].
+//
+// When LoadProcesses is called, any process details store in l.ps are cleared
+// and, assuming success, the existing cache file is replaced.
+//
+// [procfs]: https://en.wikipedia.org/wiki/Procfs
 func (l *LinuxInspector) LoadProcesses() error {
 	// Also reset the reference to in-memory cache of processes
 	l.ps = Processes{}
@@ -91,6 +101,10 @@ func (l *LinuxInspector) LoadProcesses() error {
 	return nil
 }
 
+// ClearProcessCache will empty any cached process information stored from a
+// LoadProcesses call. If called when there is no cache to clear, it returns
+// without error. An error is returned if a cache is available to clear but
+// it is unable to do so.
 func (l *LinuxInspector) ClearProcessCache() error {
 	err := clearProcessCache(l.CacheFilePath)
 	if err != nil {
@@ -99,6 +113,11 @@ func (l *LinuxInspector) ClearProcessCache() error {
 	return nil
 }
 
+// GetProcesses retrieves all process information available. If a cache
+// pre-exists, GetProcesses will load the processes from that cache. If a cache
+// does not exist, the implementation should run LoadProcesses, which loads
+// process information from procfs and refreshes the cache. The cache may be
+// ignored by settings the appropriate setting in [InspectorConfig].
 func (l *LinuxInspector) GetProcesses() (Processes, error) {
 	// if processes aren't already attached to LinuxInspector, attempt to load
 	// them from filesystem cache.
@@ -255,10 +274,17 @@ func getPIDs() ([]int, error) {
 	return pids, nil
 }
 
-// LoadProcessName returns the name of the process for the provided PID. If the
-// name cannot be resolved, an empty string is returned.
-func LoadProcessName(procfsFp string, pid int) (string, error) {
-	path, err := LoadProcessPath(procfsFp, pid)
+// GetProcessNameFromBinary attempts to resolve the executable name that
+// created the process. This is resolved by looking up the symlink in:
+//
+//	/proc/${PID}/exec
+//
+// If the symlink cannot be resolved, an empty name and error is returned. This
+// can commonly happen with kernel processes and processes which the user does
+// not have permission to resolve the symlink. Upon error, it is up to the
+// caller to determine if they'd like to resolve the name through other means.
+func GetProcessNameFromBinary(procfsFp string, pid int) (string, error) {
+	path, err := GetProcessPath(procfsFp, pid)
 	if err != nil {
 		return "", err
 	}
@@ -269,8 +295,9 @@ func LoadProcessName(procfsFp string, pid int) (string, error) {
 	return dirs[len(dirs)-1], nil
 }
 
-// LoadProcessSHA evaluates the sha256 value of the binary.
-func LoadProcessSHA(path string) string {
+// NewSHAFromProcess takes a path to a file (likely a binary) and returns a
+// SHA256 checksum representing its contents.
+func NewSHAFromProcess(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -290,15 +317,10 @@ func LoadProcessSHA(path string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-// LoadProcessPath returns the path, or location, of the binary being executed
+// GetProcessPath returns the path, or location, of the binary being executed
 // as a process. To reliably determine the path, it reads the symbolic link in
-// /proc/${PID}/exe and resolves the final file as seperated by "/". While a
-// reliable way to approach process resolution on Linux, it does require root
-// access to resolve.
-//
-// TODO(joshrosso): Consider a more logic-based approach to name resolution
-// when root access is not possible.
-func LoadProcessPath(procfsFp string, pid int) (string, error) {
+// /proc/${PID}/exe and resolves the final file.
+func GetProcessPath(procfsFp string, pid int) (string, error) {
 	exeLink, err := os.Readlink(filepath.Join(procfsFp, strconv.Itoa(pid), exeDir))
 	if err != nil {
 		return "", err
@@ -317,7 +339,7 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 	hasPerm := true
 	isK := false
 	var sha string
-	name, err := LoadProcessName(procfsFp, pid)
+	name, err := GetProcessNameFromBinary(procfsFp, pid)
 
 	// when error is bubbled up, determine why to set name correctly
 	if err != nil {
@@ -340,7 +362,7 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		}
 
 	}
-	path, err := LoadProcessPath(procfsFp, pid)
+	path, err := GetProcessPath(procfsFp, pid)
 	if err != nil {
 		if os.IsPermission(err) {
 			path = permDenied
@@ -355,11 +377,11 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		if sum, ok := knownSHAs[path]; ok {
 			sha = sum
 		} else {
-			sha = LoadProcessSHA(path)
+			sha = NewSHAFromProcess(path)
 			knownSHAs[path] = sha
 		}
 	}
-	stat := LoadStat(procfsFp, pid)
+	stat := NewProcessStatFromFile(procfsFp, pid)
 
 	p := Process{
 		ID:            pid,
@@ -369,16 +391,19 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		CommandPath:   path,
 		ParentProcess: stat.ParentID,
 		BinarySHA:     sha,
+		Type:          linuxProcessType,
 		OSSpecific:    &stat,
 	}
 
 	return p
 }
 
-// LoadStat translates fields in the stat file (/proc/${PID}/stat) into
-// structured data. Details on stat contents can be found at
-// https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10.
-func LoadStat(procfsFp string, pid int) ProcessStat {
+// NewProcessStatFromFile translates fields in the stat file
+// (/proc/${PID}/stat) into structured data. See the [kernel docs] for a table
+// of values found in a stat file.
+//
+// [kernel docs]: https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10.
+func NewProcessStatFromFile(procfsFp string, pid int) ProcessStat {
 	ps := ProcessStat{}
 	stat, err := os.ReadFile(filepath.Join(procfsFp, strconv.Itoa(pid), statDir))
 	if err != nil {
@@ -500,10 +525,25 @@ func LoadStat(procfsFp string, pid int) ProcessStat {
 	return ps
 }
 
-// ConvertToHexMemoryAddress takes a memory address, represented as a decimal
-// (the default for Linux's procfs) and converts it to a memory address in
-// hexadecimal notation. Note the returned value will contain the '0x'
-// notation.
+// ConvertToHexMemoryAddress takes a memory address, represented in [decimal
+// notation] (base 10) (the default for Linux's procfs) and converts it to a
+// memory address in [hexadecimal notation]. Note the returned value will contain
+// the '0x' prefix.
+//
+// As an example, a valid decimal-represented memory address reported by procfs could be:
+//
+//	140732934197230
+//
+// When converted to hexadecimal notation, based on this function, this will be returned:
+//
+//	0x7ffef08d0fee
+//
+// For memory addresses, pblib should automatically do this
+// translation to the hexadecimal notation held in a string. However, this
+// fucntion is available in case you wish to do a conversion yourself.
+//
+// [decimal notation]: https://en.wikipedia.org/wiki/Decimal#Decimal_notation
+// [hexadecimal notation]: https://en.wikipedia.org/wiki/Hexadecimal
 func ConvertToHexMemoryAddress(decimalAddr string) string {
 	d, _ := strconv.Atoi(decimalAddr)
 	return fmt.Sprintf("0x%x", d)
