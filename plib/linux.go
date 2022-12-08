@@ -61,19 +61,18 @@ func (l *LinuxInspector) LoadProcesses() error {
 		return err
 	}
 
+	knownSHAs := map[string]string{}
 	// for each pid, load its data
 	for _, p := range ps {
-		loadedProcess := LoadProcessStat(l.LinuxConfig.ProcfsFilePath, p)
+		loadedProcess := LoadProcessStat(l.LinuxConfig.ProcfsFilePath, p, knownSHAs)
 		// when the process is a kernel process and inspect is configured to not
 		// include them, skip this process.
 		if !l.LinuxConfig.IncludeKernel && loadedProcess.IsKernel {
-			fmt.Println("DEBUG: skipping for kernel")
 			continue
 		}
 		// when the user doesn't have permission to access process details and the
 		// inspector is configured to not include these, skip this process.
 		if !l.LinuxConfig.IncludePermissionIssues && !loadedProcess.HasPermission {
-			fmt.Println("DEBUG: skipping for perm")
 			continue
 		}
 
@@ -213,17 +212,6 @@ func encodeProcessCache(cacheFp string, ps Processes) error {
 	return nil
 }
 
-func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
-	*FullPIDList = append(*FullPIDList, rootPID)
-	parentID := pidlist[rootPID].ParentProcess
-	if parentID > 1 {
-		resolvePIDRelationship(FullPIDList, pidlist, parentID)
-	}
-	if parentID == 1 {
-		*FullPIDList = append(*FullPIDList, 1)
-	}
-}
-
 // getPIDs takes the procfs filepath and returns a list of all the known pids
 // based on the directory name.
 func getPIDsFromProcfs(procfsFp string) ([]int, error) {
@@ -318,20 +306,14 @@ func LoadProcessPath(procfsFp string, pid int) (string, error) {
 	return exeLink, nil
 }
 
-func LoadProcessPath2(procfsFp string, pid int) (string, error) {
-	exeLink, err := os.Readlink(filepath.Join(procfsFp, strconv.Itoa(pid), exeDir))
-	if err != nil {
-		return "", err
-	}
-	return exeLink, nil
-}
-
 // LoadProcessStat introspects the process's directory in procfs to retrieve
 // relevant information and product a instance of Process. The generated
 // Process object is then returned. No error is returned, as missing
 // information or lack of access to data in procfs will result in missing
-// information in the generated returned Process.
-func LoadProcessStat(procfsFp string, pid int) Process {
+// information in the generated returned Process. knownSHAs contains a map of
+// SHA values where the key is the binary path. This enables lookup of already
+// known SHAs without needing to rehash. To force rehash, use an empty map.
+func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Process {
 	hasPerm := true
 	isK := false
 	var sha string
@@ -358,8 +340,7 @@ func LoadProcessStat(procfsFp string, pid int) Process {
 		}
 
 	}
-	path, err := LoadProcessPath2(procfsFp, pid)
-	//TODO(joshrosso): cleanup this logic.
+	path, err := LoadProcessPath(procfsFp, pid)
 	if err != nil {
 		if os.IsPermission(err) {
 			path = permDenied
@@ -370,9 +351,15 @@ func LoadProcessStat(procfsFp string, pid int) Process {
 		}
 
 	} else {
-		sha = LoadProcessSHA(path)
+		// determine if sha is already known, if now, calculate it from file.
+		if sum, ok := knownSHAs[path]; ok {
+			sha = sum
+		} else {
+			sha = LoadProcessSHA(path)
+			knownSHAs[path] = sha
+		}
 	}
-	stat := LoadStat2(procfsFp, pid)
+	stat := LoadStat(procfsFp, pid)
 
 	p := Process{
 		ID:            pid,
@@ -388,147 +375,12 @@ func LoadProcessStat(procfsFp string, pid int) Process {
 	return p
 }
 
-func MergeOptions(opts []ListOptions) ListOptions {
-	// default case when opts are empty
-	if len(opts) < 1 {
-		return ListOptions{}
-	}
-	// TODO(joshrosso): Need to do actual merge logic rather than perferring
-	// first option
-	return opts[0]
-}
-
 // LoadStat translates fields in the stat file (/proc/${PID}/stat) into
 // structured data. Details on stat contents can be found at
 // https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10.
-func LoadStat2(procfsFp string, pid int) ProcessStat {
+func LoadStat(procfsFp string, pid int) ProcessStat {
 	ps := ProcessStat{}
 	stat, err := os.ReadFile(filepath.Join(procfsFp, strconv.Itoa(pid), statDir))
-	if err != nil {
-		return ps
-	}
-	parsedStats := strings.Split(string(stat), " ")
-
-	for i, stat := range parsedStats {
-		//fmt.Printf("stat %d: %s\n", i, stat)
-		switch i {
-		case 0:
-			ps.ID, _ = strconv.Atoi(stat)
-		case 1:
-			ps.FileName = stat
-		case 2:
-			ps.State = stat
-		case 3:
-			ps.ParentID, _ = strconv.Atoi(stat)
-		case 4:
-			ps.ProcessGroup, _ = strconv.Atoi(stat)
-		case 5:
-			ps.SessionID, _ = strconv.Atoi(stat)
-		case 6:
-			ps.TTY, _ = strconv.Atoi(stat)
-		case 7:
-			ps.TTYProcessGroup, _ = strconv.Atoi(stat)
-		case 8:
-			ps.TaskFlags = stat
-		case 9:
-			ps.MinorFaultQuantity, _ = strconv.Atoi(stat)
-		case 10:
-			ps.MinorFaultWithChildQuantity, _ = strconv.Atoi(stat)
-		case 11:
-			ps.MajorFaultQuantity, _ = strconv.Atoi(stat)
-		case 12:
-			ps.MajorFaultWithChildQuantity, _ = strconv.Atoi(stat)
-		case 13:
-			ps.UserModeTime, _ = strconv.Atoi(stat)
-		case 14:
-			ps.KernalTime, _ = strconv.Atoi(stat)
-		case 15:
-			ps.UserModeTimeWithChild, _ = strconv.Atoi(stat)
-		case 16:
-			ps.KernalTimeWithChild, _ = strconv.Atoi(stat)
-		case 17:
-			ps.Priority, _ = strconv.Atoi(stat)
-		case 18:
-			ps.Nice, _ = strconv.Atoi(stat)
-		case 19:
-			ps.ThreadQuantity, _ = strconv.Atoi(stat)
-		case 20:
-			ps.ItRealValue, _ = strconv.Atoi(stat)
-		case 21:
-			ps.StartTime, _ = strconv.Atoi(stat)
-		case 22:
-			ps.VirtualMemSize, _ = strconv.Atoi(stat)
-		case 23:
-			ps.ResidentSetMemSize, _ = strconv.Atoi(stat)
-		case 24:
-			ps.RSSByteLimit, _ = strconv.Atoi(stat)
-		case 25:
-			ps.StartCode = ConvertToHexMemoryAddress(stat)
-		case 26:
-			ps.EndCode = ConvertToHexMemoryAddress(stat)
-		case 27:
-			ps.StartStack = ConvertToHexMemoryAddress(stat)
-		case 28:
-			ps.ExtendedStackPointerAddress, _ = strconv.Atoi(stat)
-		case 29:
-			ps.ExtendedInstructionPointer, _ = strconv.Atoi(stat)
-		case 30:
-			ps.SignalPendingQuantity, _ = strconv.Atoi(stat)
-		case 31:
-			ps.SignalsBlockedQuantity, _ = strconv.Atoi(stat)
-		case 32:
-			ps.SignalsIgnoredQuantity, _ = strconv.Atoi(stat)
-		case 33:
-			ps.SiganlsCaughtQuantity, _ = strconv.Atoi(stat)
-		case 34:
-			ps.PlaceHolder1, _ = strconv.Atoi(stat)
-		case 35:
-			ps.PlaceHolder2, _ = strconv.Atoi(stat)
-		case 36:
-			ps.PlaceHolder3, _ = strconv.Atoi(stat)
-		case 37:
-			signalNumeric, _ := strconv.Atoi(stat)
-			ps.ExitSignal = Signal(signalNumeric)
-		case 38:
-			ps.CPU, _ = strconv.Atoi(stat)
-		case 39:
-			ps.RealtimePriority, _ = strconv.Atoi(stat)
-		case 40:
-			ps.SchedulingPolicy, _ = strconv.Atoi(stat)
-		case 41:
-			ps.TimeSpentOnBlockIO, _ = strconv.Atoi(stat)
-		case 42:
-			ps.GuestTime, _ = strconv.Atoi(stat)
-		case 43:
-			ps.GuestTimeWithChild, _ = strconv.Atoi(stat)
-		case 44:
-			ps.StartDataAddress = ConvertToHexMemoryAddress(stat)
-		case 45:
-			ps.EndDataAddress = ConvertToHexMemoryAddress(stat)
-		case 46:
-			ps.HeapExpansionAddress = ConvertToHexMemoryAddress(stat)
-		case 47:
-			ps.StartCMDAddress = ConvertToHexMemoryAddress(stat)
-		case 48:
-			ps.EndCMDAddress = ConvertToHexMemoryAddress(stat)
-		case 49:
-			ps.StartEnvAddress = ConvertToHexMemoryAddress(stat)
-		case 50:
-			ps.EndEnvAddress = ConvertToHexMemoryAddress(stat)
-		case 51:
-			ps.ExitCode, _ = strconv.Atoi(stat)
-		}
-	}
-
-	return ps
-}
-
-// LoadStat translates fields in the stat file (/proc/${PID}/stat) into
-// structured data. Details on stat contents can be found at
-// https://www.kernel.org/doc/html/latest/filesystems/proc.html#id10.
-func LoadStat(pid int) ProcessStat {
-	ps := ProcessStat{}
-	stat, err := os.ReadFile(filepath.Join(defaultProcDir, strconv.Itoa(pid), statDir))
 	if err != nil {
 		return ps
 	}
@@ -653,7 +505,6 @@ func LoadStat(pid int) ProcessStat {
 // hexadecimal notation. Note the returned value will contain the '0x'
 // notation.
 func ConvertToHexMemoryAddress(decimalAddr string) string {
-	// TODO(joshrosso): need to do something about error cases here
 	d, _ := strconv.Atoi(decimalAddr)
 	return fmt.Sprintf("0x%x", d)
 }
