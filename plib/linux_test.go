@@ -9,16 +9,19 @@ import (
 )
 
 const (
-	DefaultFilePerms = 0777
-	StatDirName      = "stat"
-	HackDir          = "hack"
-	TestingDir       = "test"
-	TestDataDir      = "data-dir"
-	TestProcDir      = "proc"
-	TestCacheDir     = "cache"
-	TestCacheFile    = "proc.cache"
-	StatData1002     = `1002 (Thunar) S 898 898 898 0 -1 4194304 9075 31619 19 0 242 54 42 7 20 0 3 0 4316 499617792 14545 18446744073709551615 94657007656960 94657008059597 140727172487872 0 0 0 0 4096 0 0 0 0 17 10 0 0 0 0 0 94657008206176 94657008240992 94657028120576 140727172496280 140727172496349 140727172496349 140727172497384 0`
-	StatData68657    = `68657 (chromium) S 68654 68650 68650 0 -1 4194560 1462096 116023 16 0 13834 4693 47 34 20 0 23 0 7679775 35172757504 80617 18446744073709551615 94708279918592 94708471088624 140731884479632 0 0 0 0 4096 1098990847 0 0 0 17 0 0 0 0 0 0 94708479643648 94708480167272 94708482572288 140731884485166 140731884485225 140731884485225 140731884486621 0`
+	DefaultFilePerms    = 0777
+	StatDirName         = "stat"
+	HackDir             = "hack"
+	TestingDir          = "test"
+	TestDataDir         = "data-dir"
+	TestBinDir          = "bin"
+	TestProcDir         = "proc"
+	TestCacheDir        = "cache"
+	TestCacheFile       = "proc.cache"
+	TestThunarBinName   = "Thunar"
+	TestChromiumBinName = "Chromium"
+	StatData1002        = `1002 (Thunar) S 898 898 898 0 -1 4194304 9075 31619 19 0 242 54 42 7 20 0 3 0 4316 499617792 14545 18446744073709551615 94657007656960 94657008059597 140727172487872 0 0 0 0 4096 0 0 0 0 17 10 0 0 0 0 0 94657008206176 94657008240992 94657028120576 140727172496280 140727172496349 140727172496349 140727172497384 0`
+	StatData68657       = `68657 (chromium) S 68654 68650 68650 0 -1 4194560 1462096 116023 16 0 13834 4693 47 34 20 0 23 0 7679775 35172757504 80617 18446744073709551615 94708279918592 94708471088624 140731884479632 0 0 0 0 4096 1098990847 0 0 0 17 0 0 0 0 0 0 94708479643648 94708480167272 94708482572288 140731884485166 140731884485225 140731884485225 140731884486621 0`
 )
 
 func TestLoadProcesses(t *testing.T) {
@@ -166,8 +169,8 @@ func TestGetProcesses(t *testing.T) {
 		t.Fatalf("failed retrieving processes: %s", err)
 	}
 
-	if ps[1002].CommandName != "(Thunar)" {
-		t.Logf("command name for process %d was: %s but we expected %s", 1002, ps[1002].CommandName, "(Thunar)")
+	if ps[1002].CommandName != "Thunar" {
+		t.Logf("command name for process %d was: %s but we expected %s", 1002, ps[1002].CommandName, "Thunar")
 		t.Fail()
 	}
 
@@ -176,8 +179,8 @@ func TestGetProcesses(t *testing.T) {
 		t.Fail()
 	}
 
-	if ps[68657].CommandName != "(chromium)" {
-		t.Logf("command name for process %d was: %s but we expected %s", 68657, ps[68657].CommandName, "(chromium)")
+	if ps[68657].CommandName != "Chromium" {
+		t.Logf("command name for process %d was: %s but we expected %s", 68657, ps[68657].CommandName, "Chromium")
 		t.Fail()
 	}
 
@@ -251,8 +254,8 @@ func TestGetProcessesFromMemory(t *testing.T) {
 	}
 
 	// check a value
-	if ps[1002].CommandName != "(Thunar)" {
-		t.Logf("command name for process %d was: %s but we expected %s", 1002, ps[1002].CommandName, "(Thunar)")
+	if ps[1002].CommandName != "Thunar" {
+		t.Logf("command name for process %d was: %s but we expected %s", 1002, ps[1002].CommandName, "Thunar")
 		t.Fail()
 	}
 
@@ -336,24 +339,30 @@ func TestGetProcessesFromFileCache(t *testing.T) {
 	}
 
 	// check a value
-	if ps[68657].CommandName != "(chromium)" {
-		t.Logf("command name for process %d was: %s but we expected %s", 68657, ps[68657].CommandName, "(chromium)")
+	if ps[68657].CommandName != "Chromium" {
+		t.Logf("command name for process %d was: %s but we expected %s", 68657, ps[68657].CommandName, "Chromium")
 		t.Fail()
 	}
 
 }
 
 func createDirsAndSampleData() error {
+	testBinFp, err := createMockBinDir()
+	if err != nil {
+		return err
+	}
+
 	procFp, err := createMockProcDir()
 	if err != nil {
 		return err
 	}
 	sampleData := []struct {
-		pid  string
-		data string
+		pid     string
+		data    string
+		binName string
 	}{
-		{"1002", StatData1002},
-		{"68657", StatData68657},
+		{"1002", StatData1002, TestThunarBinName},
+		{"68657", StatData68657, TestChromiumBinName},
 	}
 
 	// Load all sample data for procfs
@@ -368,12 +377,43 @@ func createDirsAndSampleData() error {
 		if err != nil {
 			return err
 		}
+		// create fake binary
+		f, err := os.Create(filepath.Join(testBinFp, p.binName))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		err = os.Symlink(filepath.Join(testBinFp, p.binName), filepath.Join(procFp, p.pid, exeDir))
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func createMockProcDir() (string, error) {
 	fp := getTestProcDir()
+	if _, err := os.Stat(fp); err != nil {
+		// if the dir was stat'd (it exists) then remove it.
+		if err == nil {
+			err = os.Remove(fp)
+			// return error if unable to remove existing file
+			if err != nil {
+				return "", fmt.Errorf("failed cleaning existing testing data directory: %s", err)
+			}
+		}
+	}
+
+	err := os.MkdirAll(fp, DefaultFilePerms)
+	if err != nil {
+		return "", fmt.Errorf("failed creating testing data directory: %s", err)
+	}
+
+	return fp, nil
+}
+
+func createMockBinDir() (string, error) {
+	fp := getTestBinDir()
 	if _, err := os.Stat(fp); err != nil {
 		// if the dir was stat'd (it exists) then remove it.
 		if err == nil {
@@ -428,6 +468,14 @@ func getTestCacheDir() string {
 		return ""
 	}
 	return filepath.Join(filepath.Dir(cwd), HackDir, TestingDir, TestDataDir, TestCacheDir)
+}
+
+func getTestBinDir() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(cwd), HackDir, TestingDir, TestDataDir, TestBinDir)
 }
 
 func cleanTestData() {

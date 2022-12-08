@@ -24,6 +24,11 @@ type LinuxInspectorConfig struct {
 	// or operating a very-customized Linux box, you probably should not set
 	// this.
 	ProcfsFilePath string
+  // Whether to include kernel processes when doing process lookup.
+	IncludeKernel bool
+  // Whether to include processes that the user does not have premission to
+  // access all the details.
+	IncludePermissionIssues bool
 }
 
 // ProcessStat is a representation of procfs's stat file in Linux hosts.

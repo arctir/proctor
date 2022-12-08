@@ -64,6 +64,19 @@ func (l *LinuxInspector) LoadProcesses() error {
 	// for each pid, load its data
 	for _, p := range ps {
 		loadedProcess := LoadProcessStat(l.LinuxConfig.ProcfsFilePath, p)
+		// when the process is a kernel process and inspect is configured to not
+		// include them, skip this process.
+		if !l.LinuxConfig.IncludeKernel && loadedProcess.IsKernel {
+			fmt.Println("DEBUG: skipping for kernel")
+			continue
+		}
+		// when the user doesn't have permission to access process details and the
+		// inspector is configured to not include these, skip this process.
+		if !l.LinuxConfig.IncludePermissionIssues && !loadedProcess.HasPermission {
+			fmt.Println("DEBUG: skipping for perm")
+			continue
+		}
+
 		l.ps[p] = &loadedProcess
 	}
 
@@ -174,7 +187,7 @@ func encodeProcessCache(cacheFp string, ps Processes) error {
 	// if specified cache directory does not exist, create it.
 	if _, err := os.Stat(cacheFp); err != nil {
 		if os.IsNotExist(err) {
-			err := os.MkdirAll(cacheFp, 0666)
+			err := os.MkdirAll(cacheFp, 0777)
 			if err != nil {
 				return err
 			}
@@ -200,15 +213,6 @@ func encodeProcessCache(cacheFp string, ps Processes) error {
 	return nil
 }
 
-// TODO(joshrosso)
-func (l *LinuxInspector) ListProcesses() ([]Process, error) {
-	ps, err := GetProcesses()
-	if err != nil {
-		return nil, err
-	}
-	return ps, nil
-}
-
 func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID int) {
 	*FullPIDList = append(*FullPIDList, rootPID)
 	parentID := pidlist[rootPID].ParentProcess
@@ -218,35 +222,6 @@ func resolvePIDRelationship(FullPIDList *[]int, pidlist map[int]Process, rootPID
 	if parentID == 1 {
 		*FullPIDList = append(*FullPIDList, 1)
 	}
-}
-
-// GetProcessesByName looks up a process based on its name. In the case of
-// linux, this is done by TODO(joshrosso). An error is returned if process
-// lookup failed. If no process with the provided name is found, an empty slice
-// is returned.
-func GetProcessesByName(name string, opts ...ListOptions) ([]Process, error) {
-	results := []Process{}
-	ps, err := GetProcesses(opts...)
-	if err != nil {
-		return []Process{}, err
-	}
-	for i := range ps {
-		if ps[i].CommandName == name {
-			results = append(results, ps[i])
-		}
-	}
-
-	return results, nil
-}
-
-func RunGetProcesses() []Process {
-	ps, err := GetProcesses()
-	if err != nil {
-		//TODO(joshrosso): Deal with this.
-		panic(err)
-	}
-
-	return ps
 }
 
 // getPIDs takes the procfs filepath and returns a list of all the known pids
@@ -294,8 +269,8 @@ func getPIDs() ([]int, error) {
 
 // LoadProcessName returns the name of the process for the provided PID. If the
 // name cannot be resolved, an empty string is returned.
-func LoadProcessName(pid int) (string, error) {
-	path, err := LoadProcessPath(pid)
+func LoadProcessName(procfsFp string, pid int) (string, error) {
+	path, err := LoadProcessPath(procfsFp, pid)
 	if err != nil {
 		return "", err
 	}
@@ -335,8 +310,8 @@ func LoadProcessSHA(path string) string {
 //
 // TODO(joshrosso): Consider a more logic-based approach to name resolution
 // when root access is not possible.
-func LoadProcessPath(pid int) (string, error) {
-	exeLink, err := os.Readlink(filepath.Join(defaultProcDir, strconv.Itoa(pid), exeDir))
+func LoadProcessPath(procfsFp string, pid int) (string, error) {
+	exeLink, err := os.Readlink(filepath.Join(procfsFp, strconv.Itoa(pid), exeDir))
 	if err != nil {
 		return "", err
 	}
@@ -360,7 +335,7 @@ func LoadProcessStat(procfsFp string, pid int) Process {
 	hasPerm := true
 	isK := false
 	var sha string
-	name, err := LoadProcessName(pid)
+	name, err := LoadProcessName(procfsFp, pid)
 
 	// when error is bubbled up, determine why to set name correctly
 	if err != nil {
@@ -411,107 +386,6 @@ func LoadProcessStat(procfsFp string, pid int) Process {
 	}
 
 	return p
-}
-
-// LoadProcessDetails introspects the process's directory in procfs to retrieve
-// relevant information and product a instance of Process. The generated
-// Process object is then returned. No error is returned, as missing
-// information or lack of access to data in procfs will result in missing
-// information in the generated returned Process.
-func LoadProcessDetails(pid int) Process {
-	hasPerm := true
-	isK := false
-	var sha string
-	name, err := LoadProcessName(pid)
-
-	// when error is bubbled up, determine why to set name correctly
-	if err != nil {
-		switch {
-		case os.IsPermission(err):
-			name = permDenied
-			hasPerm = false
-		case os.IsNotExist(err):
-			stat, err := os.ReadFile(filepath.Join(defaultProcDir, strconv.Itoa(pid), statDir))
-			if err != nil {
-				//TODO(joshrosso): Clean this up.
-				panic(err)
-			}
-			//TODO(joshrosso): But does this handle nullCharacter?
-			parsedStats := strings.Split(string(stat), " ")
-			name = parsedStats[1]
-			isK = true
-		default:
-			name = "ERROR_UNKNOWN"
-		}
-
-	}
-	path, err := LoadProcessPath(pid)
-	//TODO(joshrosso): cleanup this logic.
-	if err != nil {
-		if os.IsPermission(err) {
-			path = permDenied
-			sha = permDenied
-		} else {
-			path = statError
-			sha = statError
-		}
-
-	} else {
-		sha = LoadProcessSHA(path)
-	}
-	stat := LoadStat(pid)
-
-	p := Process{
-		ID:            pid,
-		IsKernel:      isK,
-		HasPermission: hasPerm,
-		CommandName:   name,
-		CommandPath:   path,
-		ParentProcess: stat.ParentID,
-		BinarySHA:     sha,
-		OSSpecific:    &stat,
-	}
-
-	return p
-}
-
-// GetProcesses retrieves all the processes from procfs. It introspects
-// each process to gather data and returns a slice of Processes. An error is
-// returned when GetProcesses is unable to interact with procfs.
-func GetProcesses(opts ...ListOptions) ([]Process, error) {
-	opt := MergeOptions(opts)
-	pids, err := getPIDs()
-	if err != nil {
-		return nil, err
-	}
-
-	procs := []Process{}
-
-	for _, pid := range pids {
-		p := LoadProcessDetails(pid)
-		switch {
-		// filter out kernel processes and permission issues
-		case !opt.IncludeKernel && !opt.IncludePermissionIssues:
-			if !p.IsKernel && p.HasPermission {
-				procs = append(procs, p)
-			}
-		// filter out permission issues, include kernel processes
-		case opt.IncludeKernel && !opt.IncludePermissionIssues:
-			if p.HasPermission {
-				procs = append(procs, p)
-			}
-		// filter out kernel processes, include permission issues
-		case !opt.IncludeKernel && opt.IncludePermissionIssues:
-			if !p.IsKernel {
-				procs = append(procs, p)
-			}
-		// include all processes
-		case opt.IncludeKernel && opt.IncludePermissionIssues:
-			procs = append(procs, p)
-		}
-	}
-
-	return procs, nil
 }
 
 func MergeOptions(opts []ListOptions) ListOptions {

@@ -112,12 +112,20 @@ type InspectorConfig struct {
 // NewInspector returns an Inspector instance based on the host's operating
 // system. If the host's operating system cannot be detected or the operating
 // system is unsupported, an error is returned.
-func NewInspector() (Inspector, error) {
+//
+// An [InspectorConfig] can be optionally passed if you'd like to change the
+// defaults. Note that while NewInspector accepts multiple opts arguments, it
+// is recommended you only pass one. If you pass more than one, the last opts
+// instance in the list will be used.
+func NewInspector(opts ...InspectorConfig) (Inspector, error) {
 	switch runtime.GOOS {
 	// TODO(joshrosso): Other target architectures
 	case "linux":
-		return nil, nil
-		//return &LinuxInspector{}, nil
+		insp, err := newLinuxInspector(opts...)
+		if err != nil {
+			return nil, err
+		}
+		return insp, nil
 	}
 
 	return nil, fmt.Errorf(

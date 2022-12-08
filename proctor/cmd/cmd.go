@@ -15,279 +15,360 @@ import (
 	"github.com/spf13/pflag"
 )
 
-func init() {
-	// output
-	getCmd.Flags().StringP(outputFlag, "o", "table", "Output type for command [table (default), json].")
-	listCmd.Flags().StringP(outputFlag, "o", "table", "Output type for command [table (default), json].")
-	treeCmd.Flags().StringP(outputFlag, "o", "table", "Output type for command [table (default), json].")
-
-	// kernel filter
-	getCmd.Flags().Bool(includeKernelFlag, false, "Include kernel processes in out, default is false.")
-	listCmd.Flags().Bool(includeKernelFlag, false, "Include kernel processes in out, default is false.")
-	treeCmd.Flags().Bool(includeKernelFlag, false, "Include kernel processes in out, default is false.")
-
-	// permission filter
-	listCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
-	treeCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
-	getCmd.Flags().Bool(includePermIssueFlag, false, "Include processes that proctor failed to introspect due to permission issues.")
-}
-
-type OutputType int
-
-const (
-	jsonOut OutputType = iota
-	tableOut
-	outputFlag           = "output"
-	includeKernelFlag    = "include-kernel"
-	includePermIssueFlag = "include-permission-issues"
-)
-
-type ProctorOpts struct {
-	outType          OutputType
-	includeKernel    bool
-	includePermIssue bool
-}
-
-var proctorCmd = &cobra.Command{
-	Use:   "proctor",
-	Short: "A command-line tool for inspecting processes and understanding their relationships.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) == 0 {
-			cmd.Help()
-			os.Exit(0)
-		}
-	},
-	CompletionOptions: cobra.CompletionOptions{
-		DisableDefaultCmd: true,
-	},
-}
-
-var getCmd = &cobra.Command{
-	Use:   "get",
-	Short: "Retrieves a process's details.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Println("Please enter a process name")
-			return
-		}
-		AssembleGetProcesses(args[0], newOptions(cmd.Flags()))
-	},
-}
-
-var treeCmd = &cobra.Command{
-	Use:   "tree",
-	Short: "Retrieve a process's and it's ancestor(s)' details.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Println("Please enter a process name")
-			return
-		}
-		AssembleTreeForProcess(args[0], newOptions(cmd.Flags()))
-	},
-}
-
-var listCmd = &cobra.Command{
-	Use:     "list",
-	Aliases: []string{"ls"},
-	Short:   "List all available processes and their details.",
-	Run: func(cmd *cobra.Command, args []string) {
-		AssembleListProcesses(newOptions(cmd.Flags()))
-	},
-}
-
-var fpCmd = &cobra.Command{
-	Use:     "finger-print",
-	Aliases: []string{"fp"},
-	Short:   "Returns a checksum (SHA256) based on a process's relationships. By default, it uses the hashes of its and all parent process binaries.",
-	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 1 {
-			fmt.Println("Please enter a process name")
-			return
-		}
-		AssembleFpProcesses(args[0], newOptions(cmd.Flags()))
-	},
-}
-
-// SetupCommands adds the CLI commands to the proctor CLI.
-func SetupCommands() *cobra.Command {
-	proctorCmd.AddCommand(listCmd)
-	proctorCmd.AddCommand(getCmd)
-	proctorCmd.AddCommand(treeCmd)
-	proctorCmd.AddCommand(fpCmd)
+// SetupCLI constructs the cobra hierachry to create the proctor CLI.
+//
+// Do not use this function in other Go pacakges. Instead, you should look to
+// import the libraries used in the cmd packge directly. For example, [plib].
+//
+// [plib]: https://github.com/arctir/proctor/tree/main/plib
+func SetupCLI() *cobra.Command {
+	proctorCmd.AddCommand(processCmd)
+	processCmd.AddCommand(listCmd)
+	processCmd.AddCommand(getCmd)
+	processCmd.AddCommand(treeCmd)
+	processCmd.AddCommand(fpCmd)
 
 	return proctorCmd
 }
 
-func AssembleGetProcesses(processName string, opts ProctorOpts) {
-	plibOpts := plib.ListOptions{
-		IncludeKernel:           opts.includeKernel,
-		IncludePermissionIssues: opts.includePermIssue,
+// runProctor defines what should occur when `proctor ...` is run.
+func runProctor(cmd *cobra.Command, args []string) {
+	// if proctor is run without a command (argument), print help.
+	if len(args) == 0 {
+		cmd.Help()
+		os.Exit(0)
 	}
+}
 
-	var out []byte
-	ps, err := plib.GetProcessesByName(processName, plibOpts)
-	// TODO(joshrosso): deal with panic
+// runProcess defines what should occur when `proctor process ...` is run.
+func runProcess(cmd *cobra.Command, args []string) {
+	// if proctor is run without a command (argument), print help.
+	if len(args) == 0 {
+		cmd.Help()
+		os.Exit(0)
+	}
+}
+
+// runListProcesses defines the behavior of running:
+// `proctor process ls ...`
+func runListProcesses(cmd *cobra.Command, args []string) {
+	opts := newOptions(cmd.Flags())
+	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
-		panic(err.Error())
+		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
+	}
+	out, err := createListOutput(ps, opts)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("failed creating output for retrieved processes: %s", err))
 	}
 
-	switch opts.outType {
-	case jsonOut:
-		out, err = json.Marshal(ps)
-		// TODO(joshrosso): Make this better.
+	output(out)
+}
+
+// runGetProcess defines the behavior of running:
+// `proctor process get ...`
+func runGetProcess(cmd *cobra.Command, args []string) {
+	fs := cmd.Flags()
+	opts := newOptions(cmd.Flags())
+	ps, err := createInspectorAndGetProcesses(opts)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
+	}
+
+	// use flags to determine how to resolve process(es)
+	id, _ := fs.GetInt(idFlag)
+	name, _ := fs.GetString(nameFlag)
+	var out []byte
+	switch {
+	case id != 0:
+		p := ps[id]
+		out, err = createSingleOutput(p, opts)
 		if err != nil {
-			panic(err.Error())
+			outputErrorAndFail(fmt.Sprintf("failed creating output for process: %s", err))
+		}
+	case name != "":
+		matchedPs := findAllProcessesWithName(name, ps)
+		out, err = createListOutput(matchedPs, opts)
+		if err != nil {
+			outputErrorAndFail(fmt.Sprintf("failed creating output for processes: %s", err))
 		}
 	default:
-		out = createGetTable(ps)
+		cmd.Help()
 	}
 
-	fmt.Printf("%s\n", out)
+	output(out)
 }
 
-func AssembleFpProcesses(processName string, opts ProctorOpts) {
-	plibOpts := plib.ListOptions{
-		IncludeKernel:           opts.includeKernel,
-		IncludePermissionIssues: opts.includePermIssue,
-	}
-
-	psRelationships := plib.RunGetProcessForRelationship(processName, plibOpts)
-	fp, err := CreateFingerPrint(psRelationships)
+// runTreeProcess defines the behavior of running:
+// `proctor process tree ...`
+func runTreeProcess(cmd *cobra.Command, args []string) {
+	pid, err := parseID(args)
 	if err != nil {
-		// TODO(joshrosso): just temporary for POC. Design how to really
-		// bubble up errors at some point.
-		fmt.Printf("couldn't create fingerprint: %s", err.Error())
-		return
+		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
 	}
-	fmt.Printf("%s\n", fp)
-}
+	opts := newOptions(cmd.Flags())
+	ps, err := createInspectorAndGetProcesses(opts)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
+	}
+	if ps[pid] == nil {
+		outputErrorAndFail(fmt.Sprintf("failed to find process with id: %d", pid))
+	}
 
-func CreateFingerPrint(pr plib.ProcessRelation) (string, error) {
-	combinedHashes := ""
-	prte := pr
-
+	// collect all processes from the specified and recursively to every parent.
+	relatedPs := []plib.Process{}
+	relatedPs = append(relatedPs, *ps[pid])
+	currentParentPid := ps[pid].ParentProcess
 	for {
-		if !prte.Process.HasPermission {
-			return "", fmt.Errorf("Missing permissions for all binary checksums. Try using sudo?\n")
-		}
-		if prte.Process.BinarySHA == "" {
-			return "", fmt.Errorf("An unexpected error occured where the binary was missing its SHA.\n")
-		}
-		combinedHashes += prte.Process.BinarySHA
-
-		if prte.Parent == nil {
+		// we've reached the root (likely the init system).
+		if currentParentPid == 0 {
 			break
 		}
-		prte = *prte.Parent
+		// if we can't resolve details about the parent process, stop gathering the
+		// hierarchy.
+		if ps[currentParentPid] == nil {
+			break
+		}
+		relatedPs = append(relatedPs, *ps[currentParentPid])
+		currentParentPid = ps[currentParentPid].ParentProcess
 	}
+
+	o, err := createSliceListOutput(relatedPs, opts)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("failed creating output for processes: %s", err))
+	}
+	output(o)
+}
+
+// runFingerPrintProcess defines the behavior for running:
+// `proctor process finger-print ...`
+func runFingerPrintProcess(cmd *cobra.Command, args []string) {
+	pid, err := parseID(args)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
+	}
+	opts := newOptions(cmd.Flags())
+	ps, err := createInspectorAndGetProcesses(opts)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
+	}
+	if ps[pid] == nil {
+		outputErrorAndFail(fmt.Sprintf("failed to find process with id: %d", pid))
+	}
+
+	if ps[pid].BinarySHA == "" {
+		outputErrorAndFail(fmt.Sprintf("process %d is missing details about its binary binary checksum.", pid))
+	}
+	combinedHashes := ps[pid].BinarySHA
+	// collect all processes from the specified and recursively to every parent.
+	currentParentPid := ps[pid].ParentProcess
+	for {
+		// we've reached the root (likely the init system).
+		if currentParentPid == 0 {
+			break
+		}
+		// if we can't resolve details about the parent process, there may be an
+		// issue with permission and the finger print will not be valid.
+		if ps[currentParentPid] == nil {
+			outputErrorAndFail(fmt.Sprintf("could not gather details on parent process: %d and thus could not generate a finger print. error: %s", currentParentPid, err))
+		}
+		combinedHashes += ps[currentParentPid].BinarySHA
+		currentParentPid = ps[currentParentPid].ParentProcess
+	}
+
 	fp := sha256.Sum256([]byte(combinedHashes))
-
-	return hex.EncodeToString(fp[:]), nil
+	output([]byte(hex.EncodeToString(fp[:])))
 }
 
-// AssembleTreeForProcess derives a tree of ancestor processes by introspecting
-// TODO(joshrosso): move away from outputOption type string
-func AssembleTreeForProcess(processName string, opts ProctorOpts) {
-	plibOpts := plib.ListOptions{
-		IncludeKernel:           opts.includeKernel,
-		IncludePermissionIssues: opts.includePermIssue,
+// parseID is a helper function to determine if the first argument passed to
+// the command is a valid ID (int).
+func parseID(args []string) (int, error) {
+	// user must specify an ID
+	if len(args) < 1 {
+		return 0, fmt.Errorf("please provide a pid (int)")
 	}
-
-	psRelationships := plib.RunGetProcessForRelationship(processName, plibOpts)
-	var out []byte
-	var err error
-	switch opts.outType {
-	case jsonOut:
-		out, err = json.Marshal(psRelationships)
-		// TODO(joshrosso): Make this better.
-		if err != nil {
-			panic(err.Error())
-		}
-	default:
-		out = createTreeTable(psRelationships)
-	}
-	fmt.Printf("%s\n", out)
-}
-
-func AssembleListProcesses(opts ProctorOpts) {
-	plibOpts := plib.ListOptions{
-		IncludeKernel:           opts.includeKernel,
-		IncludePermissionIssues: opts.includePermIssue,
-	}
-
-	ps, err := plib.GetProcesses(plibOpts)
+	pid, err := strconv.Atoi(args[0])
 	if err != nil {
-		// TODO(joshrosso): Make this better.
-		panic(err.Error())
+		return 0, err
 	}
-
-	var out []byte
-	switch opts.outType {
-	case jsonOut:
-		out, err = json.Marshal(ps)
-		// TODO(joshrosso): Make this better.
-		if err != nil {
-			panic(err.Error())
-		}
-		fmt.Printf("%s\n", out)
-	default:
-		out = createGetTable(ps)
-		fmt.Printf("%s\n", out)
-	}
+	return pid, nil
 }
 
-func createTreeTable(pr plib.ProcessRelation) []byte {
-	ps := [][]string{}
-	prte := pr
-	for {
-		ps = append(ps, []string{strconv.Itoa(prte.Process.ID), prte.Process.CommandName, prte.Process.CommandPath, prte.Process.BinarySHA})
-		if prte.Parent == nil {
-			break
-		}
-		prte = *prte.Parent
+// createInspectorAndGetProcesses is a helper function since most CLI commands will need table:
+// 1. Create a new LinuxInspector
+// 2. Setup configuration
+// 3. Retrieve a list of processes
+func createInspectorAndGetProcesses(opts proctorOpts) (plib.Processes, error) {
+	conf := plib.InspectorConfig{
+		LinuxConfig: plib.LinuxInspectorConfig{
+			IncludeKernel:           opts.includeKernel,
+			IncludePermissionIssues: opts.includePermIssue,
+		},
 	}
-
-	var buf bytes.Buffer
-	table := tablewriter.NewWriter(&buf)
-	table.SetHeader([]string{"PID", "name", "location", "SHA"})
-	table.AppendBulk(ps)
-	table.Render()
-	return buf.Bytes()
+	insp, err := plib.NewInspector(conf)
+	if err != nil {
+		return nil, fmt.Errorf("failed setting up library to retrieve processes: %s", err)
+	}
+	// if reset cache was set, clear the cache before attempting to load processes
+	if opts.resetCache {
+		insp.ClearProcessCache()
+	}
+	ps, err := insp.GetProcesses()
+	if err != nil {
+		return nil, fmt.Errorf("failed retrieving processes via Linux APIs: %s", err)
+	}
+	return ps, nil
 }
 
-func createGetTable(ps []plib.Process) []byte {
-	psList := [][]string{}
+// findAllProcessesWithName looks through all processes (ps) and find any
+// process where the [plib.Process]'s CommandName is equal to the provided
+// name. Since there can be multiple processes with the same command name, this
+// returns another processes (map/list).
+func findAllProcessesWithName(name string, ps plib.Processes) plib.Processes {
+	matchedPs := plib.Processes{}
 	for _, p := range ps {
-		psList = append(psList, []string{strconv.Itoa(p.ID), p.CommandName, p.CommandPath, p.BinarySHA})
+		if p.CommandName == name {
+			matchedPs[p.ID] = p
+		}
+	}
+
+	return matchedPs
+}
+
+func output(out []byte) {
+	fmt.Printf("%s", out)
+}
+
+func outputErrorAndFail(msg string) {
+	fmt.Println(msg)
+	// exit(1) is the catchall for general errors.
+	os.Exit(1)
+}
+
+func createSingleOutput(ps *plib.Process, opts proctorOpts) ([]byte, error) {
+	var out []byte
+	switch opts.outType {
+	case jsonOut:
+		out = createJSONSingleOutput(ps)
+	default:
+		out = createTableSingleOutput(ps)
+	}
+
+	return out, nil
+}
+
+func createSliceListOutput(ps []plib.Process, opts proctorOpts) ([]byte, error) {
+	var out []byte
+	switch opts.outType {
+	case jsonOut:
+		out = createJSONSliceListOutput(ps)
+	default:
+		out = createTableSliceListOutput(ps)
+	}
+
+	return out, nil
+}
+
+func createListOutput(ps plib.Processes, opts proctorOpts) ([]byte, error) {
+	var out []byte
+	switch opts.outType {
+	case jsonOut:
+		out = createJSONListOutput(ps)
+	default:
+		out = createTableListOutput(ps)
+	}
+
+	return out, nil
+}
+
+func createJSONSliceListOutput(ps []plib.Process) []byte {
+	out, _ := json.Marshal(ps)
+	return out
+}
+
+func createJSONListOutput(ps plib.Processes) []byte {
+	out, _ := json.Marshal(ps)
+	return out
+}
+
+func createJSONSingleOutput(ps *plib.Process) []byte {
+	out, _ := json.Marshal(ps)
+	return out
+}
+
+func createTableSingleOutput(p *plib.Process) []byte {
+	if p == nil {
+		return []byte{}
+	}
+
+	psToReturn := []string{
+		strconv.Itoa(p.ID),
+		p.CommandName,
+		p.CommandPath,
+		p.BinarySHA,
 	}
 
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
 	table.SetHeader([]string{"PID", "name", "location", "SHA"})
-	table.AppendBulk(psList)
+	table.Append(psToReturn)
 	table.Render()
 	return buf.Bytes()
 }
 
-func newOptions(fs *pflag.FlagSet) ProctorOpts {
-	ot := resolveOutputType(fs)
-	fko, err := fs.GetBool(includeKernelFlag)
-	if err != nil {
-		fko = false
-	}
-	ipi, err := fs.GetBool(includePermIssueFlag)
-	if err != nil {
-		ipi = false
+func createTableListOutput(ps plib.Processes) []byte {
+	listOfPs := [][]string{}
+	for _, p := range ps {
+		listOfPs = append(listOfPs, []string{
+			strconv.Itoa(p.ID),
+			p.CommandName,
+			p.CommandPath,
+			p.BinarySHA,
+		})
 	}
 
-	return ProctorOpts{
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"PID", "name", "location", "SHA"})
+	table.AppendBulk(listOfPs)
+	table.Render()
+	return buf.Bytes()
+}
+
+func createTableSliceListOutput(ps []plib.Process) []byte {
+	listOfPs := [][]string{}
+	for _, p := range ps {
+		listOfPs = append(listOfPs, []string{
+			strconv.Itoa(p.ID),
+			p.CommandName,
+			p.CommandPath,
+			p.BinarySHA,
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"PID", "name", "location", "SHA"})
+	table.AppendBulk(listOfPs)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newOptions(fs *pflag.FlagSet) proctorOpts {
+	ot := resolveOutputType(fs)
+	fko, _ := fs.GetBool(includeKernelFlag)
+	ipi, _ := fs.GetBool(includePermIssueFlag)
+	rc, _ := fs.GetBool(resetCacheFlag)
+
+	return proctorOpts{
 		outType:          ot,
 		includeKernel:    fko,
 		includePermIssue: ipi,
+		resetCache:       rc,
 	}
 }
 
-func resolveOutputType(fs *pflag.FlagSet) OutputType {
+func resolveOutputType(fs *pflag.FlagSet) outputType {
 	of, err := fs.GetString(outputFlag)
 	// default if there are ever issues finding flag
 	if err != nil {
