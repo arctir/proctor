@@ -4,6 +4,10 @@ help: help-text #### Details how to build, install, package, and/or deploy.
 ## Build targets ##
 ###################
 
+test: ## Creates a proctor binary at ./out/proctor. Uses host's OS and Arch.
+	go test -v ./...
+	@printf $(green_start)"Completed running all tests (read output, this does not mean they passed)."$(green_end)
+
 build: ## Creates a proctor binary at ./out/proctor. Uses host's OS and Arch.
 	go build -o ./out/proctor ./proctor/main.go
 	@printf $(green_start)"Built and saved proctor to ./out/proctor."$(green_end)
