@@ -303,15 +303,13 @@ func NewSHAFromProcess(path string) string {
 	}
 	f, err := os.Open(path)
 	if err != nil {
-		//TODO(joshrosso): fix this
-		panic(err)
+		return shaReadError
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		//TODO(joshrosso): fix this
-		panic(err)
+		return shaReadError
 	}
 
 	return fmt.Sprintf("%x", h.Sum(nil))
@@ -350,8 +348,11 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		case os.IsNotExist(err):
 			stat, err := os.ReadFile(filepath.Join(procfsFp, strconv.Itoa(pid), statDir))
 			if err != nil {
-				//TODO(joshrosso): Clean this up.
-				panic(err)
+				name = "ERROR_RESOLVING_NAME"
+				// when there is an error resolving the name, break out of the rest of
+				// the logic in this case as we cannot resolve the name from the 2nd
+				// value in stat.
+				break
 			}
 			//TODO(joshrosso): But does this handle nullCharacter?
 			parsedStats := strings.Split(string(stat), " ")

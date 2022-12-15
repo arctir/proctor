@@ -16,6 +16,7 @@ const (
 	nullCharacter    = "\x00"
 	permDenied       = "PERM_DENIED"
 	statError        = "ERROR_READING_STAT"
+	shaReadError     = "ERROR_READING_SHA"
 )
 
 const (
