@@ -3,6 +3,7 @@
 package source
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -122,9 +123,6 @@ func (gm *GitManager) GetCommits(r Repository, opts ...GetCommitsOpts) ([]Commit
 // git-related data. If there is an issue creating this representation, an
 // error is returned.
 func NewInMemRepo(url string) (*Repository, error) {
-	// 1. retrieve the repository in memory
-	// TODO(joshrosso): Need to profile this and determine the memory cost of
-	// loading the repostiory into memory.
 	mStore := memory.NewStorage()
 	r, err := git.Clone(mStore, nil, &git.CloneOptions{
 		URL:        url,
@@ -148,4 +146,8 @@ func NewInMemRepo(url string) (*Repository, error) {
 		RepoRef: r,
 	}
 	return repo, nil
+}
+
+func (h Hash) String() string {
+	return hex.EncodeToString(h[:])
 }

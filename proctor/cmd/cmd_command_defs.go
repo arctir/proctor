@@ -17,6 +17,20 @@ var processCmd = &cobra.Command{
 	Run:     runProcess,
 }
 
+var sourceCmd = &cobra.Command{
+	Use:     "source",
+	Aliases: []string{"src"},
+	Short:   "Introspect source repositories.",
+	Run:     runSource,
+}
+
+var changesCmd = &cobra.Command{
+	Use:     "changes",
+	Aliases: []string{"c"},
+	Short:   "List all changes that have happened in a repository.",
+	Run:     runChangesSource,
+}
+
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},

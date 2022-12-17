@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/arctir/proctor/plib"
+	"github.com/arctir/proctor/source"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -23,6 +25,8 @@ import (
 // [plib]: https://github.com/arctir/proctor/tree/main/plib
 func SetupCLI() *cobra.Command {
 	proctorCmd.AddCommand(processCmd)
+	proctorCmd.AddCommand(sourceCmd)
+	sourceCmd.AddCommand(changesCmd)
 	processCmd.AddCommand(listCmd)
 	processCmd.AddCommand(getCmd)
 	processCmd.AddCommand(treeCmd)
@@ -47,6 +51,50 @@ func runProcess(cmd *cobra.Command, args []string) {
 		cmd.Help()
 		os.Exit(0)
 	}
+}
+
+// runSource defines what should occur when `proctor source ...` is run.
+func runSource(cmd *cobra.Command, args []string) {
+	// if proctor is run without a command (argument), print help.
+	if len(args) == 0 {
+		cmd.Help()
+		os.Exit(0)
+	}
+}
+
+// runListProcesses defines the behavior of running:
+// `proctor process ls ...`
+func runChangesSource(cmd *cobra.Command, args []string) {
+	//opts := newOptions(cmd.Flags())
+	if len(args) == 0 {
+		cmd.Help()
+		os.Exit(0)
+	}
+	repoArg := args[0]
+
+	repo, err := source.NewInMemRepo(repoArg)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("failed resolving repository, underlying error: %s", err))
+	}
+
+	gm := source.NewGitManager()
+	commits, err := gm.GetCommits(*repo)
+	if err != nil {
+		outputErrorAndFail(fmt.Sprintf("failed resolving commits, underlying error: %s", err))
+	}
+	for _, c := range commits {
+
+		truncatedMsg := []byte{}
+		if len(c.Message) > 50 {
+			truncatedMsg = c.Message[:50]
+		} else {
+			truncatedMsg = c.Message
+		}
+		msg := strings.ReplaceAll(string(truncatedMsg), "\n", "")
+		fmt.Printf("%s: %s\n", c.Hash, msg)
+	}
+
+	//output(out)
 }
 
 // runListProcesses defines the behavior of running:

@@ -19,6 +19,40 @@ const (
 	CommitMsg1       = "inital commit"
 )
 
+func TestNewInMemRepo(t *testing.T) {
+	// Verify that invalid repository returns an error
+	fakeRepoUrl := "not-real-address"
+	_, err := NewInMemRepo(fakeRepoUrl)
+	if err == nil {
+		t.Logf("fail: Expected error to be returned when attempting to get repo: %s. Not error was returned.", fakeRepoUrl)
+		t.Fail()
+	}
+
+	// Verify valid repository is returned with correct address
+	knownGoodRepo := "https://github.com/EbookFoundation/free-programming-books"
+	r, err := NewInMemRepo(knownGoodRepo)
+	if err != nil {
+		t.Logf("fail: received error when attempt to get repo: %s. Error was: %s.", knownGoodRepo, err)
+		t.Fail()
+	}
+
+	remote, err := r.RepoRef.Remote("origin")
+	if err != nil {
+		t.Logf("fail: received error attempting to resolve remots. Error was: %s.", err)
+		t.Fail()
+	}
+
+	if len(remote.Config().URLs) < 1 {
+		t.Log("fail: found 0 URLs associated with the repos remotes.")
+		t.Fail()
+	} else {
+		if remote.Config().URLs[0] != knownGoodRepo {
+			t.Logf("fail: found remote's repo to be %s but expected %s.", remote.Config().URLs[0], knownGoodRepo)
+			t.Fail()
+		}
+	}
+}
+
 func TestGetCommits(t *testing.T) {
 	gm := NewGitManager()
 
@@ -40,10 +74,10 @@ func TestGetCommits(t *testing.T) {
 		t.Fatalf("fail: error retrieving list of commits from repo: %s", err)
 	}
 	if len(commits) != 1 {
-		t.Fatalf("failed: commit lengh was wrong, expected: %d, actual: %d", 1, len(commits))
+		t.Fatalf("fail: commit lengh was wrong, expected: %d, actual: %d", 1, len(commits))
 	}
 	if string(commits[0].Message) != CommitMsg1 {
-		t.Fatalf("failed: commit message did not match, expected: %s, actual: %s", CommitMsg1, string(commits[0].Message))
+		t.Fatalf("fail: commit message did not match, expected: %s, actual: %s", CommitMsg1, string(commits[0].Message))
 	}
 }
 
