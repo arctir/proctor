@@ -341,7 +341,7 @@ func newCommitTableOutput(commits []source.Commit, lengthLimit int) []byte {
 		listOfCommits = append(listOfCommits, []string{
 			c.Hash.String(),
 			finalCommitMsg,
-      string(truncatedAuthor),
+			string(truncatedAuthor),
 		})
 	}
 
@@ -353,10 +353,11 @@ func newCommitTableOutput(commits []source.Commit, lengthLimit int) []byte {
 	return buf.Bytes()
 }
 
-func newAuthorTableOutput(authors []source.Person) []byte {
+func newAuthorTableOutput(authors []AuthorWrapper) []byte {
 	listOfAuthors := [][]string{}
 	for _, a := range authors {
 		listOfAuthors = append(listOfAuthors, []string{
+			strconv.Itoa(a.commitCount),
 			a.Name,
 			a.Email,
 		})
@@ -364,8 +365,9 @@ func newAuthorTableOutput(authors []source.Person) []byte {
 
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
-	table.SetHeader([]string{"Name", "Email"})
+	table.SetHeader([]string{"Commits", "Name", "Email"})
 	table.AppendBulk(listOfAuthors)
+	table.SetAutoWrapText(false)
 	table.Render()
 	return buf.Bytes()
 }
@@ -403,7 +405,6 @@ func createTableSliceListOutput(ps []plib.Process) []byte {
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
 	table.SetHeader([]string{"PID", "name", "location", "SHA"})
-	table.SetAutoWrapText(false)
 	table.AppendBulk(listOfPs)
 	table.Render()
 	return buf.Bytes()

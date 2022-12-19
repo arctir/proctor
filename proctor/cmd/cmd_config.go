@@ -55,8 +55,8 @@ func init() {
 	getCmd.Flags().Int(idFlag, 0, "Get processes ID. This returns a single process since IDs are unique to processes")
 
 	// contrib flags
-	contribCmd.Flags().Bool(authorsFlag, false, "Limit output to details about contributing authors.")
-	contribCmd.Flags().StringP(tagFlag, "t", "", "Limit the results to a single tag.")
+	contribListCmd.Flags().Bool(authorsFlag, false, "Limit output to details about contributing authors.")
+	contribListCmd.Flags().StringP(tagFlag, "t", "", "Limit the results to a single tag.")
 	listCmd.Flags().String(tagOneFlag, "", "Output type for command [table (default), json].")
 	listCmd.Flags().String(tagTwoFlag, "", "Output type for command [table (default), json].")
 }

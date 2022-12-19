@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/arctir/proctor/source"
 	"github.com/spf13/cobra"
@@ -44,6 +45,8 @@ func runContribList(cmd *cobra.Command, args []string) {
 	// authors.
 	if opts.retrieveOnlyAuthors {
 		authors := getAuthors(commits)
+		// sort by number of commits
+		sort.Sort(authors)
 		out := newAuthorTableOutput(authors)
 		output(out)
 		return
@@ -53,19 +56,34 @@ func runContribList(cmd *cobra.Command, args []string) {
 	output(out)
 }
 
+type ListOfAuthors []AuthorWrapper
+
+func (a ListOfAuthors) Len() int           { return len(a) }
+func (a ListOfAuthors) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ListOfAuthors) Less(i, j int) bool { return a[j].commitCount < a[i].commitCount }
+
 // TODO(joshrosso)
 func runDiffSource(cmd *cobra.Command, args []string) {
 	return
 }
 
+type AuthorWrapper struct {
+	commitCount int
+	source.Person
+}
+
 // getAuthors takes a list of commits (c) and returns a slice of those authors.
-func getAuthors(c []source.Commit) []source.Person {
-	authors := map[string]source.Person{}
+func getAuthors(c []source.Commit) ListOfAuthors {
+	authors := map[string]AuthorWrapper{}
 	for _, commit := range c {
-		authors[commit.Author.Email] = commit.Author
+		if v, ok := authors[commit.Author.Email]; ok {
+			authors[commit.Author.Email] = AuthorWrapper{v.commitCount + 1, commit.Author}
+		} else {
+			authors[commit.Author.Email] = AuthorWrapper{1, commit.Author}
+		}
 	}
 
-	authorList := []source.Person{}
+	authorList := []AuthorWrapper{}
 	for _, v := range authors {
 		authorList = append(authorList, v)
 	}
