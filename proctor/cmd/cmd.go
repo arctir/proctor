@@ -26,7 +26,8 @@ import (
 func SetupCLI() *cobra.Command {
 	proctorCmd.AddCommand(processCmd)
 	proctorCmd.AddCommand(sourceCmd)
-	sourceCmd.AddCommand(changesCmd)
+	sourceCmd.AddCommand(contribCmd)
+	contribCmd.AddCommand(contribListCmd)
 	processCmd.AddCommand(listCmd)
 	processCmd.AddCommand(getCmd)
 	processCmd.AddCommand(treeCmd)
@@ -53,54 +54,10 @@ func runProcess(cmd *cobra.Command, args []string) {
 	}
 }
 
-// runSource defines what should occur when `proctor source ...` is run.
-func runSource(cmd *cobra.Command, args []string) {
-	// if proctor is run without a command (argument), print help.
-	if len(args) == 0 {
-		cmd.Help()
-		os.Exit(0)
-	}
-}
-
-// runListProcesses defines the behavior of running:
-// `proctor process ls ...`
-func runChangesSource(cmd *cobra.Command, args []string) {
-	//opts := newOptions(cmd.Flags())
-	if len(args) == 0 {
-		cmd.Help()
-		os.Exit(0)
-	}
-	repoArg := args[0]
-
-	repo, err := source.NewInMemRepo(repoArg)
-	if err != nil {
-		outputErrorAndFail(fmt.Sprintf("failed resolving repository, underlying error: %s", err))
-	}
-
-	gm := source.NewGitManager()
-	commits, err := gm.GetCommits(*repo)
-	if err != nil {
-		outputErrorAndFail(fmt.Sprintf("failed resolving commits, underlying error: %s", err))
-	}
-	for _, c := range commits {
-
-		truncatedMsg := []byte{}
-		if len(c.Message) > 50 {
-			truncatedMsg = c.Message[:50]
-		} else {
-			truncatedMsg = c.Message
-		}
-		msg := strings.ReplaceAll(string(truncatedMsg), "\n", "")
-		fmt.Printf("%s: %s\n", c.Hash, msg)
-	}
-
-	//output(out)
-}
-
 // runListProcesses defines the behavior of running:
 // `proctor process ls ...`
 func runListProcesses(cmd *cobra.Command, args []string) {
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -117,7 +74,7 @@ func runListProcesses(cmd *cobra.Command, args []string) {
 // `proctor process get ...`
 func runGetProcess(cmd *cobra.Command, args []string) {
 	fs := cmd.Flags()
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -154,7 +111,7 @@ func runTreeProcess(cmd *cobra.Command, args []string) {
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
 	}
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -195,7 +152,7 @@ func runFingerPrintProcess(cmd *cobra.Command, args []string) {
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
 	}
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -364,6 +321,55 @@ func createTableSingleOutput(p *plib.Process) []byte {
 	return buf.Bytes()
 }
 
+// newCommitTableOutput takes a list of commits and create a table output
+// represented in bytes. It offers a lengthLimit argument which allows
+// limitting the amount of bytes used when printing in the table.
+func newCommitTableOutput(commits []source.Commit, lengthLimit int) []byte {
+	listOfCommits := [][]string{}
+	for _, c := range commits {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits = append(listOfCommits, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+      string(truncatedAuthor),
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author"})
+	table.AppendBulk(listOfCommits)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newAuthorTableOutput(authors []source.Person) []byte {
+	listOfAuthors := [][]string{}
+	for _, a := range authors {
+		listOfAuthors = append(listOfAuthors, []string{
+			a.Name,
+			a.Email,
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Name", "Email"})
+	table.AppendBulk(listOfAuthors)
+	table.Render()
+	return buf.Bytes()
+}
+
 func createTableListOutput(ps plib.Processes) []byte {
 	listOfPs := [][]string{}
 	for _, p := range ps {
@@ -397,12 +403,39 @@ func createTableSliceListOutput(ps []plib.Process) []byte {
 	var buf bytes.Buffer
 	table := tablewriter.NewWriter(&buf)
 	table.SetHeader([]string{"PID", "name", "location", "SHA"})
+	table.SetAutoWrapText(false)
 	table.AppendBulk(listOfPs)
 	table.Render()
 	return buf.Bytes()
 }
 
-func newOptions(fs *pflag.FlagSet) proctorOpts {
+// sourceOpts provides details on how source-related details should be
+// retrieved
+type sourceOpts struct {
+	retrieveOnlyAuthors bool
+	// used when you want to limit commit retrieval to a single tag
+	singleTag string
+	// used when you want to compare commits between 2 tags, required tagTwo to
+	// be set.
+	tagOne string
+	// used when you want to compare commits between 2 tags, required tagOne to
+	// be set.
+	tagTwo string
+}
+
+func newSourceOptions(fs *pflag.FlagSet) sourceOpts {
+	roa, _ := fs.GetBool(authorsFlag)
+	singleTag, _ := fs.GetString(tagFlag)
+
+	return sourceOpts{
+		retrieveOnlyAuthors: roa,
+		singleTag:           singleTag,
+		tagOne:              "",
+		tagTwo:              "",
+	}
+}
+
+func newProctorOptions(fs *pflag.FlagSet) proctorOpts {
 	ot := resolveOutputType(fs)
 	fko, _ := fs.GetBool(includeKernelFlag)
 	ipi, _ := fs.GetBool(includePermIssueFlag)

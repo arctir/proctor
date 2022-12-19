@@ -24,11 +24,24 @@ var sourceCmd = &cobra.Command{
 	Run:     runSource,
 }
 
-var changesCmd = &cobra.Command{
-	Use:     "changes",
-	Aliases: []string{"c"},
-	Short:   "List all changes that have happened in a repository.",
-	Run:     runChangesSource,
+var contribCmd = &cobra.Command{
+	Use:     "contributions",
+	Aliases: []string{"contrib"},
+	Short:   "Access contributions details within a repository.",
+	Run:     runContrib,
+}
+
+var contribListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all contributions that have occured in this repository.",
+	Run:     runContribList,
+}
+
+var contribDiffCmd = &cobra.Command{
+	Use:   "diff",
+	Short: "Retrieve the contribution differences between two tags.",
+	Run:   runDiffSource,
 }
 
 var listCmd = &cobra.Command{

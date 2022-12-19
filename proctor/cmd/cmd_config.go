@@ -9,6 +9,10 @@ const (
 
 const (
 	outputFlag           = "output"
+	authorsFlag          = "authors"
+	tagFlag              = "tag"
+	tagOneFlag           = "tag1"
+	tagTwoFlag           = "tag2"
 	includeKernelFlag    = "include-kernel"
 	includePermIssueFlag = "include-permission-issues"
 	resetCacheFlag       = "reset-cache"
@@ -49,4 +53,10 @@ func init() {
 	// get flags
 	getCmd.Flags().String(nameFlag, "", "Get processes by the name. This will return a list of processes since processes may share the same command name.")
 	getCmd.Flags().Int(idFlag, 0, "Get processes ID. This returns a single process since IDs are unique to processes")
+
+	// contrib flags
+	contribCmd.Flags().Bool(authorsFlag, false, "Limit output to details about contributing authors.")
+	contribCmd.Flags().StringP(tagFlag, "t", "", "Limit the results to a single tag.")
+	listCmd.Flags().String(tagOneFlag, "", "Output type for command [table (default), json].")
+	listCmd.Flags().String(tagTwoFlag, "", "Output type for command [table (default), json].")
 }
