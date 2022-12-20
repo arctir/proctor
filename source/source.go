@@ -163,7 +163,7 @@ func (gm *GitManager) GetCommitsForTag(tagName string, r Repository, opts ...Get
 
 	mTags := NewMapOfTags(tags)
 	if _, ok := mTags[tagName]; !ok {
-		return nil, fmt.Errorf("requsted tag (%s) not found into repo (%s)", tagName, r.URL)
+		return nil, fmt.Errorf("requsted tag (%s) not found in repo (%s)", tagName, r.URL)
 	}
 	tag := mTags[tagName]
 
@@ -215,14 +215,17 @@ func (gm *GitManager) GetTagsFromRepository(r Repository) ([]Tag, error) {
 	var CollectedTags []Tag
 	tags.ForEach(func(o *plumbing.Reference) error {
 
-		tagRef, err := object.GetTag(r.RepoRef.Storer, o.Hash())
+		revision := plumbing.Revision(o.Name().String())
+		tagCommitHash, err := r.RepoRef.ResolveRevision(revision)
 		// TODO(joshrosso):
 		if err != nil {
+			fmt.Printf("%s: %s\n", o.Hash(), err)
 			return nil
 		}
-		commitRef, err := tagRef.Commit()
+		commitRef, err := r.RepoRef.CommitObject(*tagCommitHash)
 		// TODO(joshrosso):
 		if err != nil {
+			fmt.Println("nah-here")
 			return nil
 		}
 
@@ -271,6 +274,7 @@ func ResolveRepo(url string, opts ...ResolveRepoOpts) (*Repository, error) {
 	// if it does, open and return a ref.
 	fp := filepath.Join(getDefaultCacheLocation(), getEncodedCacheName(url))
 	if _, err := os.Stat(fp); err != nil {
+		fmt.Println("caching repo for the first time, this operation may take a while...")
 		return newFSRepo(url)
 	}
 
