@@ -239,7 +239,7 @@ func getAuthors(c []source.Commit) authorWrappers {
 // getCommits is a healper function that returns all the commits for a
 // repostiory, passed as url.
 func getCommits(url string) ([]source.Commit, error) {
-	repo, err := source.NewInMemRepo(url)
+	repo, err := source.ResolveRepo(url)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +255,7 @@ func getCommits(url string) ([]source.Commit, error) {
 // getCommits is a healper function that returns all the commits for a
 // repostiory, passed as url.
 func getCommitsForTag(url string, tagName string) ([]source.Commit, error) {
-	repo, err := source.NewInMemRepo(url)
+	repo, err := source.ResolveRepo(url)
 	if err != nil {
 		return nil, err
 	}
