@@ -24,11 +24,10 @@ var sourceCmd = &cobra.Command{
 	Run:     runSource,
 }
 
-var contribCmd = &cobra.Command{
-	Use:     "contributions",
-	Aliases: []string{"contrib"},
-	Short:   "Access contributions details within a repository.",
-	Run:     runContrib,
+var commitCmd = &cobra.Command{
+	Use:   "commit",
+	Short: "Access commit details within a repository.",
+	Run:   runContrib,
 }
 
 var artifactsCmd = &cobra.Command{
@@ -46,9 +45,9 @@ var artifactsListCmd = &cobra.Command{
 }
 
 var artifactsGetCmd = &cobra.Command{
-	Use:     "get",
-	Short:   "Gets all artifacts for a tag, using the --tag flag.",
-	Run:     runGetArtifacts,
+	Use:   "get",
+	Short: "Gets all artifacts for a tag, using the --tag flag.",
+	Run:   runGetArtifacts,
 }
 
 var contribListCmd = &cobra.Command{
