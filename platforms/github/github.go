@@ -79,7 +79,7 @@ func (g *GHManager) GetArtifacts(repoURL string) ([]Release, error) {
 		a := []Artifact{}
 		for _, asset := range release.Assets {
 			a = append(a, Artifact{
-        Name: asset.GetName(),
+				Name:        asset.GetName(),
 				URL:         asset.GetURL(),
 				ContentType: asset.GetContentType(),
 			})
