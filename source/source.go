@@ -3,16 +3,33 @@
 package source
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/adrg/xdg"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 )
 
+const (
+	CacheDirName     = "proctor"
+	CacheRepoDirName = "repos"
+)
+
+// ResolveRepoOpts provides instructions for how a repository should be retrieved.
+type ResolveRepoOpts struct {
+	// instructs doing all retrieval in memory. Note that for medium to large
+	// size repos, this can cause significant memory consumption.
+	InMemory bool
+}
+
+// Tag represents a git tag.
 type Tag struct {
 	Name string
 	Date time.Time
@@ -219,6 +236,8 @@ func (gm *GitManager) GetTagsFromRepository(r Repository) ([]Tag, error) {
 	return CollectedTags, nil
 }
 
+// NewMapOfTags returns a map representation of a list of tags where the key is
+// set to the tag name.
 func NewMapOfTags(t []Tag) map[string]Tag {
 	tagsMapped := make(map[string]Tag)
 	for _, v := range t {
@@ -227,11 +246,81 @@ func NewMapOfTags(t []Tag) map[string]Tag {
 	return tagsMapped
 }
 
-// NewInMemRepo takes the url of a repository, for example
+// ResolveRepo accepts a repository's URL and opts for how the repo should be
+// retrieved. By default, it looks up the [getDefaultCacheLocation] to
+// determine if the repository was previously cached on the filesystem. If it
+// is, it will do a git fetch to grab any new changes and return a reference to
+// the repository. If the repo does not exist on the filesystem (cache), it
+// will perform a clone that persists it to [getDefaultCacheLocation]. The
+// directory name within the cache will be a base64 encoded representation of
+// the url.
+//
+// If you wish to get a repository reference for a repo held entirely in
+// memeory, you can set InMemory to true within the [ResolveRepoOpts] argument.
+// Note that doing an in-memory clone can consume substatial system resouces
+// (heap space) when the repository is large.
+func ResolveRepo(url string, opts ...ResolveRepoOpts) (*Repository, error) {
+	conf := ResolveRepoOpts{}
+	if len(opts) > 0 {
+		conf = opts[len(opts)-1]
+	}
+	if conf.InMemory {
+		return newInMemRepo(url)
+	}
+	// Check for existence of repo in filesystem, if it doesn't exist, clone it;
+	// if it does, open and return a ref.
+	fp := filepath.Join(getDefaultCacheLocation(), getEncodedCacheName(url))
+	if _, err := os.Stat(fp); err != nil {
+		return newFSRepo(url)
+	}
+
+	ref, err := git.PlainOpen(fp)
+	if err != nil {
+		return nil, fmt.Errorf("failed opening repo in cache: %s", err)
+	}
+	err = ref.Fetch(&git.FetchOptions{
+		RemoteURL: url,
+	})
+	if err != nil {
+		if err != git.NoErrAlreadyUpToDate {
+			return nil, fmt.Errorf("failed checking if repo was up to date: %s", err)
+		}
+	}
+	repo := &Repository{
+		URL:     url,
+		RepoRef: ref,
+	}
+	return repo, nil
+}
+
+// newFSRepo attempts to clone the repository to the filesystem and return a
+// reference. If the repo already exists or there is an issue retrieving it
+// over the network, an error is returned.
+func newFSRepo(url string) (*Repository, error) {
+	err := ensureCacheDir()
+	if err != nil {
+		return nil, fmt.Errorf("failed ensuring cache location exists or creating it: %s", err)
+	}
+	fp := filepath.Join(getDefaultCacheLocation(), getEncodedCacheName(url))
+	ref, err := git.PlainClone(fp, true, &git.CloneOptions{
+		URL:        url,
+		NoCheckout: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+	repo := &Repository{
+		URL:     url,
+		RepoRef: ref,
+	}
+	return repo, nil
+}
+
+// newInMemRepo takes the url of a repository, for example
 // github.com/spf13/cobra, and constructs an in-memory representation of the
 // git-related data. If there is an issue creating this representation, an
 // error is returned.
-func NewInMemRepo(url string) (*Repository, error) {
+func newInMemRepo(url string) (*Repository, error) {
 	mStore := memory.NewStorage()
 	r, err := git.Clone(mStore, nil, &git.CloneOptions{
 		URL:        url,
@@ -259,4 +348,35 @@ func NewInMemRepo(url string) (*Repository, error) {
 
 func (h Hash) String() string {
 	return hex.EncodeToString(h[:])
+}
+
+// ensureCacheDir will verify that proctor's cache dir already exists and if it
+// doesn't, create it.
+func ensureCacheDir() error {
+	cacheFp := getDefaultCacheLocation()
+	// if specified cache directory does not exist, create it.
+	if _, err := os.Stat(cacheFp); err != nil {
+		if os.IsNotExist(err) {
+			err := os.MkdirAll(cacheFp, 0777)
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return nil
+}
+
+// getDefaultCacheLocation returns $XDG_DATA_HOME/proctor/repos. This is where
+// repositories that are cloned (cached) to the filesystem are stored.
+func getDefaultCacheLocation() string {
+	return filepath.Join(xdg.DataHome, CacheDirName, CacheRepoDirName)
+}
+
+// getEncodedCacheName takes a repo's URL and returns its representation in
+// base64 encoding. This is used for creating unique cache directories when
+// persisting cloned repos onto the filesystem.
+func getEncodedCacheName(url string) string {
+	return base64.StdEncoding.EncodeToString([]byte(url))
 }

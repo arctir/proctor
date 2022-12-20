@@ -22,7 +22,8 @@ const (
 func TestNewInMemRepo(t *testing.T) {
 	// Verify that invalid repository returns an error
 	fakeRepoUrl := "not-real-address"
-	_, err := NewInMemRepo(fakeRepoUrl)
+	resolveOpts := ResolveRepoOpts{InMemory: true}
+	_, err := ResolveRepo(fakeRepoUrl, resolveOpts)
 	if err == nil {
 		t.Logf("fail: Expected error to be returned when attempting to get repo: %s. Not error was returned.", fakeRepoUrl)
 		t.Fail()
@@ -30,7 +31,7 @@ func TestNewInMemRepo(t *testing.T) {
 
 	// Verify valid repository is returned with correct address
 	knownGoodRepo := "https://github.com/EbookFoundation/free-programming-books"
-	r, err := NewInMemRepo(knownGoodRepo)
+	r, err := ResolveRepo(knownGoodRepo, resolveOpts)
 	if err != nil {
 		t.Logf("fail: received error when attempt to get repo: %s. Error was: %s.", knownGoodRepo, err)
 		t.Fail()
