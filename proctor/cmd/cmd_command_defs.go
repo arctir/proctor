@@ -17,6 +17,52 @@ var processCmd = &cobra.Command{
 	Run:     runProcess,
 }
 
+var sourceCmd = &cobra.Command{
+	Use:     "source",
+	Aliases: []string{"src"},
+	Short:   "Introspect source repositories.",
+	Run:     runSource,
+}
+
+var commitCmd = &cobra.Command{
+	Use:   "commits",
+	Short: "Access commit details within a repository.",
+	Run:   runContrib,
+}
+
+var artifactsCmd = &cobra.Command{
+	Use:     "artifacts",
+	Aliases: []string{"art"},
+	Short:   "Artifacts associated with the repository.",
+	Run:     runArtifacts,
+}
+
+var artifactsListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "Lists all artifacts in a given repository",
+	Run:     runListArtifacts,
+}
+
+var artifactsGetCmd = &cobra.Command{
+	Use:   "get",
+	Short: "Gets all artifacts for a tag, using the --tag flag.",
+	Run:   runGetArtifacts,
+}
+
+var contribListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "List all contributions that have occured in this repository.",
+	Run:     runContribList,
+}
+
+var contribDiffCmd = &cobra.Command{
+	Use:   "diff",
+	Short: "Retrieve the contribution differences between two tags.",
+	Run:   runDiffSource,
+}
+
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},

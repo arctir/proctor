@@ -8,11 +8,18 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
+	"github.com/arctir/proctor/platforms/github"
 	"github.com/arctir/proctor/plib"
+	"github.com/arctir/proctor/source"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+)
+
+const (
+	timeDateFormat = "2006-01-02 15:04"
 )
 
 // SetupCLI constructs the cobra hierachry to create the proctor CLI.
@@ -23,6 +30,13 @@ import (
 // [plib]: https://github.com/arctir/proctor/tree/main/plib
 func SetupCLI() *cobra.Command {
 	proctorCmd.AddCommand(processCmd)
+	proctorCmd.AddCommand(sourceCmd)
+	sourceCmd.AddCommand(commitCmd)
+	sourceCmd.AddCommand(artifactsCmd)
+	artifactsCmd.AddCommand(artifactsListCmd)
+	artifactsCmd.AddCommand(artifactsGetCmd)
+	commitCmd.AddCommand(contribListCmd)
+	commitCmd.AddCommand(contribDiffCmd)
 	processCmd.AddCommand(listCmd)
 	processCmd.AddCommand(getCmd)
 	processCmd.AddCommand(treeCmd)
@@ -52,7 +66,7 @@ func runProcess(cmd *cobra.Command, args []string) {
 // runListProcesses defines the behavior of running:
 // `proctor process ls ...`
 func runListProcesses(cmd *cobra.Command, args []string) {
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -69,7 +83,7 @@ func runListProcesses(cmd *cobra.Command, args []string) {
 // `proctor process get ...`
 func runGetProcess(cmd *cobra.Command, args []string) {
 	fs := cmd.Flags()
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -106,7 +120,7 @@ func runTreeProcess(cmd *cobra.Command, args []string) {
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
 	}
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -147,7 +161,7 @@ func runFingerPrintProcess(cmd *cobra.Command, args []string) {
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("please pass a valid pid (int); we received: %s", args[0]))
 	}
-	opts := newOptions(cmd.Flags())
+	opts := newProctorOptions(cmd.Flags())
 	ps, err := createInspectorAndGetProcesses(opts)
 	if err != nil {
 		outputErrorAndFail(fmt.Sprintf("process collection failed: %s", err))
@@ -316,6 +330,168 @@ func createTableSingleOutput(p *plib.Process) []byte {
 	return buf.Bytes()
 }
 
+// newCommitTableOutput takes a list of commits and create a table output
+// represented in bytes. It offers a lengthLimit argument which allows
+// limitting the amount of bytes used when printing in the table.
+func newCommitTableOutput(commits []source.Commit, lengthLimit int) []byte {
+	listOfCommits := [][]string{}
+	for _, c := range commits {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits = append(listOfCommits, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+			string(truncatedAuthor),
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author"})
+	table.AppendBulk(listOfCommits)
+	table.Render()
+	return buf.Bytes()
+}
+
+// newCommitDiffTableOutput takes a list of commits and create a table output
+// represented in bytes. It offers a lengthLimit argument which allows
+// limitting the amount of bytes used when printing in the table.
+func newCommitDiffTableOutput(commitsOnlyIn1 []source.Commit, tag1 string, commitsOnlyIn2 []source.Commit, tag2 string, lengthLimit int) []byte {
+	listOfCommits1 := [][]string{}
+	listOfCommits2 := [][]string{}
+
+	for _, c := range commitsOnlyIn1 {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits1 = append(listOfCommits1, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+			string(truncatedAuthor),
+			c.Date.Format(timeDateFormat),
+		})
+	}
+
+	for _, c := range commitsOnlyIn2 {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits2 = append(listOfCommits2, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+			string(truncatedAuthor),
+			c.Date.Format(timeDateFormat),
+		})
+	}
+
+	var buf bytes.Buffer
+	// header commit 1
+	table := tablewriter.NewWriter(&buf)
+	table.Append([]string{fmt.Sprintf("commits only in %s", tag1)})
+	table.Render()
+
+	// commit 1 table
+	table = tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author", "Timestamp"})
+	table.AppendBulk(listOfCommits1)
+	table.Render()
+
+	// header commit 2
+	table = tablewriter.NewWriter(&buf)
+	table.Append([]string{fmt.Sprintf("commits only in %s", tag2)})
+	table.Render()
+
+	// commit 2 table
+	table = tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author", "Timestamp"})
+	table.AppendBulk(listOfCommits2)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newAuthorTableOutput(authors []authorWrapper) []byte {
+	listOfAuthors := [][]string{}
+	for _, a := range authors {
+		listOfAuthors = append(listOfAuthors, []string{
+			strconv.Itoa(a.commitCount),
+			a.Name,
+			a.Email,
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Commits", "Name", "Email"})
+	table.AppendBulk(listOfAuthors)
+	table.SetAutoWrapText(false)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newArtifactListTableOutput(releases []github.Release) []byte {
+	listOfArtifacts := [][]string{}
+	for _, r := range releases {
+		count := len(r.Artifacts)
+		listOfArtifacts = append(listOfArtifacts, []string{
+			r.Name,
+			r.Tag,
+			strconv.Itoa(count),
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Tag", "Title", "Artifacts"})
+	table.AppendBulk(listOfArtifacts)
+	table.SetAutoWrapText(false)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newArtifactGetTableOutput(releases []github.Artifact) []byte {
+	listOfArtifacts := [][]string{}
+	for _, r := range releases {
+		listOfArtifacts = append(listOfArtifacts, []string{
+			r.Name,
+			r.ContentType,
+			r.URL,
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Assset", "Content-Type", "URL"})
+	table.AppendBulk(listOfArtifacts)
+	table.SetAutoWrapText(false)
+	table.Render()
+	return buf.Bytes()
+}
+
 func createTableListOutput(ps plib.Processes) []byte {
 	listOfPs := [][]string{}
 	for _, p := range ps {
@@ -354,7 +530,35 @@ func createTableSliceListOutput(ps []plib.Process) []byte {
 	return buf.Bytes()
 }
 
-func newOptions(fs *pflag.FlagSet) proctorOpts {
+// sourceOpts provides details on how source-related details should be
+// retrieved
+type sourceOpts struct {
+	retrieveOnlyAuthors bool
+	// used when you want to limit commit retrieval to a single tag
+	singleTag string
+	// used when you want to compare commits between 2 tags, required tagTwo to
+	// be set.
+	tagOne string
+	// used when you want to compare commits between 2 tags, required tagOne to
+	// be set.
+	tagTwo string
+}
+
+func newSourceOptions(fs *pflag.FlagSet) sourceOpts {
+	roa, _ := fs.GetBool(authorsFlag)
+	singleTag, _ := fs.GetString(tagFlag)
+	t1, _ := fs.GetString(tagOneFlag)
+	t2, _ := fs.GetString(tagTwoFlag)
+
+	return sourceOpts{
+		retrieveOnlyAuthors: roa,
+		singleTag:           singleTag,
+		tagOne:              t1,
+		tagTwo:              t2,
+	}
+}
+
+func newProctorOptions(fs *pflag.FlagSet) proctorOpts {
 	ot := resolveOutputType(fs)
 	fko, _ := fs.GetBool(includeKernelFlag)
 	ipi, _ := fs.GetBool(includePermIssueFlag)
