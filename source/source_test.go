@@ -104,7 +104,6 @@ func createTestRepo1() (*Repository, error) {
 
 	// add each file
 	for file := range status {
-		fmt.Println(file)
 		_, err = wt.Add(file)
 		if err != nil {
 			return nil, err

@@ -57,6 +57,8 @@ func init() {
 	// contrib flags
 	contribListCmd.Flags().Bool(authorsFlag, false, "Limit output to details about contributing authors.")
 	contribListCmd.Flags().StringP(tagFlag, "t", "", "Limit the results to a single tag.")
-	listCmd.Flags().String(tagOneFlag, "", "Output type for command [table (default), json].")
-	listCmd.Flags().String(tagTwoFlag, "", "Output type for command [table (default), json].")
+	contribDiffCmd.Flags().String(tagOneFlag, "", "Output type for command [table (default), json].")
+	contribDiffCmd.Flags().String(tagTwoFlag, "", "Output type for command [table (default), json].")
+
+	artifactsGetCmd.Flags().StringP(tagFlag, "t", "", "Limit the results to a single tag.")
 }

@@ -10,11 +10,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/arctir/proctor/platforms/github"
 	"github.com/arctir/proctor/plib"
 	"github.com/arctir/proctor/source"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+)
+
+const (
+	timeDateFormat = "2006-01-02 15:04"
 )
 
 // SetupCLI constructs the cobra hierachry to create the proctor CLI.
@@ -27,7 +32,11 @@ func SetupCLI() *cobra.Command {
 	proctorCmd.AddCommand(processCmd)
 	proctorCmd.AddCommand(sourceCmd)
 	sourceCmd.AddCommand(contribCmd)
+	sourceCmd.AddCommand(artifactsCmd)
+	artifactsCmd.AddCommand(artifactsListCmd)
+	artifactsCmd.AddCommand(artifactsGetCmd)
 	contribCmd.AddCommand(contribListCmd)
+	contribCmd.AddCommand(contribDiffCmd)
 	processCmd.AddCommand(listCmd)
 	processCmd.AddCommand(getCmd)
 	processCmd.AddCommand(treeCmd)
@@ -353,7 +362,79 @@ func newCommitTableOutput(commits []source.Commit, lengthLimit int) []byte {
 	return buf.Bytes()
 }
 
-func newAuthorTableOutput(authors []AuthorWrapper) []byte {
+// newCommitDiffTableOutput takes a list of commits and create a table output
+// represented in bytes. It offers a lengthLimit argument which allows
+// limitting the amount of bytes used when printing in the table.
+func newCommitDiffTableOutput(commitsOnlyIn1 []source.Commit, tag1 string, commitsOnlyIn2 []source.Commit, tag2 string, lengthLimit int) []byte {
+	listOfCommits1 := [][]string{}
+	listOfCommits2 := [][]string{}
+
+	for _, c := range commitsOnlyIn1 {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits1 = append(listOfCommits1, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+			string(truncatedAuthor),
+			c.Date.Format(timeDateFormat),
+		})
+	}
+
+	for _, c := range commitsOnlyIn2 {
+		truncatedMsg := []byte{}
+		if len(c.Message) > lengthLimit {
+			truncatedMsg = c.Message[:lengthLimit]
+		} else {
+			truncatedMsg = c.Message
+		}
+		truncatedAuthor := []byte(c.Author.Email)
+		if len(truncatedAuthor) > lengthLimit {
+			truncatedAuthor = truncatedAuthor[:lengthLimit]
+		}
+		finalCommitMsg := strings.ReplaceAll(string(truncatedMsg), "\n", " ")
+		listOfCommits2 = append(listOfCommits2, []string{
+			c.Hash.String(),
+			finalCommitMsg,
+			string(truncatedAuthor),
+			c.Date.Format(timeDateFormat),
+		})
+	}
+
+	var buf bytes.Buffer
+	// header commit 1
+	table := tablewriter.NewWriter(&buf)
+	table.Append([]string{fmt.Sprintf("commits only in %s", tag1)})
+	table.Render()
+
+	// commit 1 table
+	table = tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author", "Timestamp"})
+	table.AppendBulk(listOfCommits1)
+	table.Render()
+
+	// header commit 2
+	table = tablewriter.NewWriter(&buf)
+	table.Append([]string{fmt.Sprintf("commits only in %s", tag2)})
+	table.Render()
+
+	// commit 2 table
+	table = tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"SHA", "Message", "Author", "Timestamp"})
+	table.AppendBulk(listOfCommits2)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newAuthorTableOutput(authors []authorWrapper) []byte {
 	listOfAuthors := [][]string{}
 	for _, a := range authors {
 		listOfAuthors = append(listOfAuthors, []string{
@@ -367,6 +448,45 @@ func newAuthorTableOutput(authors []AuthorWrapper) []byte {
 	table := tablewriter.NewWriter(&buf)
 	table.SetHeader([]string{"Commits", "Name", "Email"})
 	table.AppendBulk(listOfAuthors)
+	table.SetAutoWrapText(false)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newArtifactListTableOutput(releases []github.Release) []byte {
+	listOfArtifacts := [][]string{}
+	for _, r := range releases {
+		count := len(r.Artifacts)
+		listOfArtifacts = append(listOfArtifacts, []string{
+			r.Name,
+			r.Tag,
+			strconv.Itoa(count),
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Tag", "Title", "Artifacts"})
+	table.AppendBulk(listOfArtifacts)
+	table.SetAutoWrapText(false)
+	table.Render()
+	return buf.Bytes()
+}
+
+func newArtifactGetTableOutput(releases []github.Artifact) []byte {
+	listOfArtifacts := [][]string{}
+	for _, r := range releases {
+		listOfArtifacts = append(listOfArtifacts, []string{
+			r.Name,
+			r.ContentType,
+			r.URL,
+		})
+	}
+
+	var buf bytes.Buffer
+	table := tablewriter.NewWriter(&buf)
+	table.SetHeader([]string{"Assset", "Content-Type", "URL"})
+	table.AppendBulk(listOfArtifacts)
 	table.SetAutoWrapText(false)
 	table.Render()
 	return buf.Bytes()
@@ -427,12 +547,14 @@ type sourceOpts struct {
 func newSourceOptions(fs *pflag.FlagSet) sourceOpts {
 	roa, _ := fs.GetBool(authorsFlag)
 	singleTag, _ := fs.GetString(tagFlag)
+	t1, _ := fs.GetString(tagOneFlag)
+	t2, _ := fs.GetString(tagTwoFlag)
 
 	return sourceOpts{
 		retrieveOnlyAuthors: roa,
 		singleTag:           singleTag,
-		tagOne:              "",
-		tagTwo:              "",
+		tagOne:              t1,
+		tagTwo:              t2,
 	}
 }
 

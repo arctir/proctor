@@ -31,6 +31,26 @@ var contribCmd = &cobra.Command{
 	Run:     runContrib,
 }
 
+var artifactsCmd = &cobra.Command{
+	Use:     "artifacts",
+	Aliases: []string{"art"},
+	Short:   "Artifacts associated with the repository.",
+	Run:     runArtifacts,
+}
+
+var artifactsListCmd = &cobra.Command{
+	Use:     "list",
+	Aliases: []string{"ls"},
+	Short:   "Lists all artifacts in a given repository",
+	Run:     runListArtifacts,
+}
+
+var artifactsGetCmd = &cobra.Command{
+	Use:     "get",
+	Short:   "Gets all artifacts for a tag, using the --tag flag.",
+	Run:     runGetArtifacts,
+}
+
 var contribListCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls"},

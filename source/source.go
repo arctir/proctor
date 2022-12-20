@@ -8,9 +8,20 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 )
+
+type Tag struct {
+	Name string
+	Date time.Time
+	// the branch a tag is associated with
+	Branch string
+	// the last, or latest, commit on the tag.
+	LastCommit        Hash
+	AssociatedCommits []Commit
+}
 
 type Hash [20]byte
 
@@ -101,6 +112,7 @@ func (gm *GitManager) GetCommits(r Repository, opts ...GetCommitsOpts) ([]Commit
 	commitObjs.ForEach(func(obj *object.Commit) error {
 		commit := Commit{
 			Hash: Hash(obj.Hash),
+			Date: obj.Committer.When,
 			Committer: Person{
 				Name:  obj.Committer.Name,
 				Email: obj.Committer.Email,
@@ -116,6 +128,103 @@ func (gm *GitManager) GetCommits(r Repository, opts ...GetCommitsOpts) ([]Commit
 	})
 
 	return commits, nil
+}
+
+// GetCommitsForTag takes a tagName and its associated repository and returns a
+// slice of every commit associated with it. It looks up the commits
+// **exclusively** by looking up the Tag.LastCommit field. The commits are
+// found by doing the equivelant of a git log against the latest (newest)
+// commit associated with the tag. Commits within the slice are arranged in
+// order by date. When commits are unable to be retrieved from the repository,
+// an error is returned.
+func (gm *GitManager) GetCommitsForTag(tagName string, r Repository, opts ...GetCommitsOpts) ([]Commit, error) {
+
+	tags, err := gm.GetTagsFromRepository(r)
+	if err != nil {
+		return nil, fmt.Errorf("failed retrieving tags for repo: %s. Error: %s", r.URL, err)
+	}
+
+	mTags := NewMapOfTags(tags)
+	if _, ok := mTags[tagName]; !ok {
+		return nil, fmt.Errorf("requsted tag (%s) not found into repo (%s)", tagName, r.URL)
+	}
+	tag := mTags[tagName]
+
+	emptyHash := Hash{}
+	// if r is passed without a ref existent, error immediatly or else a panic
+	// (nil pointer) will occur.
+	if r.RepoRef == nil {
+		return nil, fmt.Errorf("failed to find reference to valid repo when looking up commits.")
+	}
+	// LastCommit hash was empty and error should be returnd
+	if tag.LastCommit == emptyHash {
+		return nil, fmt.Errorf("no lastcommit hash was specified with tag.")
+	}
+
+	commits, err := r.RepoRef.Log(&git.LogOptions{
+		From:  plumbing.Hash(tag.LastCommit),
+		Order: git.LogOrderCommitterTime,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve commits from tag \"%s\". Error from go-git was: %s", tag.Name, err)
+	}
+	CollectedCommits := []Commit{}
+	commits.ForEach(func(o *object.Commit) error {
+		CollectedCommits = append(CollectedCommits, Commit{
+			Hash: Hash(o.Hash),
+			Date: o.Committer.When,
+			Author: Person{
+				Name:  o.Author.Name,
+				Email: o.Author.Email,
+			},
+			Message: []byte(o.Message),
+		})
+		return nil
+	})
+
+	return CollectedCommits, nil
+}
+
+// GetTagsFromRepository accepts a repository returns all tags that are
+// associated in it.
+func (gm *GitManager) GetTagsFromRepository(r Repository) ([]Tag, error) {
+	if r.RepoRef == nil {
+		return nil, fmt.Errorf("request to retrieve tags was requested but their was no repo associated with the passed argument")
+	}
+	tags, err := r.RepoRef.Tags()
+	if err != nil {
+		return nil, fmt.Errorf("failed to retieve tags for repository %s. Error from go-get: %s", r.URL, err)
+	}
+	var CollectedTags []Tag
+	tags.ForEach(func(o *plumbing.Reference) error {
+
+		tagRef, err := object.GetTag(r.RepoRef.Storer, o.Hash())
+		// TODO(joshrosso):
+		if err != nil {
+			return nil
+		}
+		commitRef, err := tagRef.Commit()
+		// TODO(joshrosso):
+		if err != nil {
+			return nil
+		}
+
+		CollectedTags = append(CollectedTags, Tag{
+			Name:       o.Name().Short(),
+			LastCommit: Hash(commitRef.Hash),
+		})
+		return nil
+	})
+
+	return CollectedTags, nil
+}
+
+func NewMapOfTags(t []Tag) map[string]Tag {
+	tagsMapped := make(map[string]Tag)
+	for _, v := range t {
+		tagsMapped[v.Name] = v
+	}
+	return tagsMapped
 }
 
 // NewInMemRepo takes the url of a repository, for example
