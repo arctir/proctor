@@ -25,7 +25,7 @@ var sourceCmd = &cobra.Command{
 }
 
 var commitCmd = &cobra.Command{
-	Use:   "commit",
+	Use:   "commits",
 	Short: "Access commit details within a repository.",
 	Run:   runContrib,
 }
