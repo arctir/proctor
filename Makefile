@@ -4,9 +4,13 @@ help: help-text #### Details how to build, install, package, and/or deploy.
 ## Build targets ##
 ###################
 
-test: ## Creates a proctor binary at ./out/proctor. Uses host's OS and Arch.
+test: ## Runs unit tests against all packages.
 	go test -v ./...
-	@printf $(green_start)"Completed running all tests (read output, this does not mean they passed)."$(green_end)
+	@printf $(green_start)"Completed running all unit tests (read output, this does not mean they passed)."$(green_end)
+
+test-all: ## Runs unit and integration tests against all packages.
+	go test -v -tags=integration ./...
+	@printf $(green_start)"Completed running all integration tests (read output, this does not mean they passed)."$(green_end)
 
 build: ## Creates a proctor binary at ./out/proctor. Uses host's OS and Arch.
 	go build -o ./out/proctor ./proctor/main.go
