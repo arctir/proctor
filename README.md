@@ -7,7 +7,7 @@ easily try-out and leverage the power of these introspection tools.
 
 Proctor may be particularly helpful to a developer, SRE, or devops humans
 wishing to quickly introspect aspects of their software and stacks. For a
-quickstart and few examples, see our [examples docs](TODO(joshrosso)).
+quickstart and few examples, see our [examples docs](docs/examples).
 
 Our intent with proctor is to share libraries with the open source community,
 help folks build other introspection-oriented tooling atop, and get feedback on
@@ -43,7 +43,7 @@ go get github.com/arctir/proctor/pkg/plib
 Similarly, the Go doc describing this library are available at
 [pkg.go.dev](https://pkg.go.dev/github.com/arctir/proctor/pkg/plib).
 
-Once installed, run `proctor help` or visit [our documentation](TODO(joshrosso)) for details on
+Once installed, run `proctor help` or visit [our documentation](docs/examples) for details on
 usage.
 
 ## Development
