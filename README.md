@@ -7,7 +7,7 @@ easily try-out and leverage the power of these introspection tools.
 
 Proctor may be particularly helpful to a developer, SRE, or devops humans
 wishing to quickly introspect aspects of their software and stacks. For a
-quickstart and few examples, see our [examples docs](docs/examples).
+quickstart and few examples, see our [examples docs](docs/examples.md).
 
 Our intent with proctor is to share libraries with the open source community,
 help folks build other introspection-oriented tooling atop, and get feedback on
