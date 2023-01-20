@@ -17,13 +17,12 @@ our ideas and approaches.
 
 ### As a CLI
 
-At this time, there is no official package manager support for proctor. However,
-you can easily install the binary with the go tool or download it from [GitHub
-releases](https://github.com/arctir/proctor/releases). To install proctor with
-the go tool, run:
+At this time, there is no official package manager support for proctor and you
+need to compile from source (using `go install`). To install proctor with the go
+tool, run:
 
 ```
-go install github.com/arctir/proctor
+go install github.com/arctir/proctor/proctor@latest
 ```
 
 This will place the proctor binary, for your target architecture, in `$GOBIN`.
