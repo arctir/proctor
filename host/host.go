@@ -138,7 +138,8 @@ func (h *LinuxReader) GetHostID() (string, error) {
 	if len(midBytes) < 1 {
 		return "", fmt.Errorf("failed resolving machine ID. Error was: machine-id file present but empty.")
 	}
-	return string(midBytes), nil
+	mid := strings.Trim(string(midBytes), "\n")
+	return mid, nil
 }
 
 // getCPUInfo retrieves details about the system's CPU based on /proc/cpuinfo.
@@ -177,7 +178,8 @@ func getArch() string {
 	if err != nil {
 		return UnknownKey
 	}
-	return string(utsname.Machine[:])
+	arch := strings.TrimSpace(string(utsname.Machine[:]))
+	return arch
 }
 
 // sanitizeOSVersion removes a double quote character from the beginning and end of a string if
