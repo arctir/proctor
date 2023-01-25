@@ -1,3 +1,4 @@
 # out is the default directory compiled binaries are saved to.
 out/
 hack/test/data-dir/
+host/hack/test/run/*
