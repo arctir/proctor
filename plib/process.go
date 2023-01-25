@@ -29,6 +29,10 @@ const (
 type Process struct {
 	// The process's numeric identifier. On *nix, this is the pid.
 	ID int
+	// The machine's unique identifier that relates the process to it.
+	// This is likely to be generated using the [host.GetHostID]. For Linux systems, this can be
+	// (but does not have to be) sourced from /etc/machine-id
+	MachineID string
 	// The SHA256 value representing the process's binary.
 	BinarySHA string
 	// The name of the command that was triggered for execution.

@@ -138,7 +138,8 @@ func (h *LinuxReader) GetHostID() (string, error) {
 	if len(midBytes) < 1 {
 		return "", fmt.Errorf("failed resolving machine ID. Error was: machine-id file present but empty.")
 	}
-	return string(midBytes), nil
+	mid := strings.Trim(string(midBytes), "\n")
+	return mid, nil
 }
 
 // getCPUInfo retrieves details about the system's CPU based on /proc/cpuinfo.
