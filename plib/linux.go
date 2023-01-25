@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/arctir/proctor/host"
 )
 
 // newLinuxInspector takes an optional [LinuxInspectorConfig] and returns a
@@ -383,9 +385,15 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		}
 	}
 	stat := NewProcessStatFromFile(procfsFp, pid)
+	lr := host.NewLinuxReader(host.LinuxReaderConfig{})
+	hostID, err := lr.GetHostID()
+	if err != nil {
+		hostID = "ERROR_UNKNOWN"
+	}
 
 	p := Process{
 		ID:            pid,
+		MachineID:     hostID,
 		IsKernel:      isK,
 		HasPermission: hasPerm,
 		CommandName:   name,
