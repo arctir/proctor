@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	DefaultProcRoot   = "/proc"
-	OSReleaseFilePath = "/etc/os-release"
-	OSKernelFilePath  = "sys/kernel/osrelease"
-	CPUInfoFilePath   = "cpuinfo"
-	UnknownKey        = "UNKNOWN"
+	DefaultMachineIDPath = "/etc/machine-id"
+	DefaultProcRoot      = "/proc"
+	OSReleaseFilePath    = "/etc/os-release"
+	OSKernelFilePath     = "sys/kernel/osrelease"
+	CPUInfoFilePath      = "cpuinfo"
+	UnknownKey           = "UNKNOWN"
 )
 
 // OS represents details about the operating system.
@@ -53,23 +54,31 @@ type HostReader interface {
 	// GetHardware retrieves hardware-level details. Or, in the case of a virtual machine, what is
 	// exposed to the guest.
 	GetHardware() (*Hardware, error)
+	// GetHostID retrieves a unique identifier that represents the host (physical/virtual machine).
+	GetHostID() (string, error)
 }
 
 // LinuxReader is the Linux-specific implementation of [HostReader].
 type LinuxReader struct {
-	procDir string
+	procDir       string
+	machineIDPath string
 }
 
 type LinuxReaderConfig struct {
-	ProcDirPath string
+	ProcDirPath   string
+	MachineIDPath string
 }
 
 func NewLinuxReader(conf LinuxReaderConfig) LinuxReader {
 	if conf.ProcDirPath == "" {
 		conf.ProcDirPath = DefaultProcRoot
 	}
+	if conf.MachineIDPath == "" {
+		conf.MachineIDPath = DefaultMachineIDPath
+	}
 	return LinuxReader{
-		procDir: conf.ProcDirPath,
+		procDir:       conf.ProcDirPath,
+		machineIDPath: conf.MachineIDPath,
 	}
 }
 
@@ -114,6 +123,22 @@ func (h *LinuxReader) GetHardware() (*Hardware, error) {
 		CPU:          CPUInfo,
 		Architecture: arch,
 	}, nil
+}
+
+// GetHostID provides a unique identifier representing the host. Today, it relies on [machine-id],
+// which is created by Linux during installation. This functionality can be expanded over time to
+// add methods for detecting the ID, when /etc/machine-id isn't possible or inadequate. If a ID is
+// unable to be resolved, an error is returned.
+func (h *LinuxReader) GetHostID() (string, error) {
+	midBytes, err := os.ReadFile(h.machineIDPath)
+	if err != nil {
+		return "", fmt.Errorf("failed resolving machine ID. Error was: %s", err)
+	}
+	// machineID not present in file; this is an error
+	if len(midBytes) < 1 {
+		return "", fmt.Errorf("failed resolving machine ID. Error was: machine-id file present but empty.")
+	}
+	return string(midBytes), nil
 }
 
 // getCPUInfo retrieves details about the system's CPU based on /proc/cpuinfo.
