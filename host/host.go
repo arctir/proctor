@@ -178,7 +178,8 @@ func getArch() string {
 	if err != nil {
 		return UnknownKey
 	}
-	return string(utsname.Machine[:])
+	arch := string(bytes.Trim(utsname.Machine[:], "\x00"))
+	return arch
 }
 
 // sanitizeOSVersion removes a double quote character from the beginning and end of a string if
