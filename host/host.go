@@ -178,7 +178,7 @@ func getArch() string {
 	if err != nil {
 		return UnknownKey
 	}
-	arch := strings.TrimSpace(string(utsname.Machine[:]))
+	arch := string(bytes.Trim(utsname.Machine[:], "\x00"))
 	return arch
 }
 
