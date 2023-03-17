@@ -4,6 +4,8 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/arctir/proctor/plib"
@@ -12,6 +14,55 @@ import (
 const (
 	port = ":8080"
 )
+
+const viewProcessDetails = `
+<html>
+	<head>
+
+	<style>
+		.buttons {
+			margin-bottom: 1rem;
+		}
+		button {
+			background-color: black;
+			color: white;
+			border: 1px solid black;
+			padding: 8px;
+			font-size: 16px;
+			cursor: pointer;
+		}
+		table {
+			border-collapse: collapse;
+			width: 100%;
+		}
+		th, td {
+			border: 1px solid black;
+			padding: 8px;
+			text-align: left;
+		}
+		th {
+			background-color: black;
+			color: white;
+		}
+	</style>
+		<title>Procotor display</title>
+	</head>
+	<body>
+		<div class="container">
+		<table>
+            <tr>
+                <th>Command Name</th>
+                <th>Command Path</th>
+            </tr>
+            <tr>
+                <td>{{ .CommandName }}</td>
+                <td>{{ .CommandPath }}</td>
+            </tr>
+			</table>
+		</div>
+	</body>
+</html>
+`
 
 const view = `
 <html>
@@ -62,7 +113,7 @@ const view = `
 			{{range $key, $value := .PS}}
             <tr>
                 <td>{{$key}}</td>
-                <td>{{.CommandName}}</td>
+				<td><a href="process/{{$key}}">{{.CommandName}}</a></td>
                 <td>{{.BinarySHA}}</td>
             </tr>
             {{end}}
@@ -115,6 +166,21 @@ func (ui *UI) RunUI() {
 		}
 		log.Println("refreshed process cache")
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
+
+	http.HandleFunc("/process/", func(w http.ResponseWriter, r *http.Request) {
+		pidString := strings.TrimPrefix(r.URL.Path, "/process/")
+		pid, err := strconv.Atoi(pidString)
+		if err != nil {
+			panic(err)
+		}
+
+		t := template.Must(template.New("map").Parse(viewProcessDetails))
+		// Render the template with the data
+		err = t.Execute(w, ui.data.PS[pid])
+		if err != nil {
+			panic(err)
+		}
 	})
 
 	log.Printf("serving at %s", port)
