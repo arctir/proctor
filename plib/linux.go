@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/arctir/proctor/host"
 )
@@ -108,6 +109,9 @@ func (l *LinuxInspector) LoadProcesses() error {
 // without error. An error is returned if a cache is available to clear but
 // it is unable to do so.
 func (l *LinuxInspector) ClearProcessCache() error {
+	// reset in-memory cache
+	l.ps = nil
+	// reset file-based cache
 	err := clearProcessCache(l.CacheFilePath)
 	if err != nil {
 		return fmt.Errorf("failed to clear the existing process cache: %s", err)
@@ -136,6 +140,7 @@ func (l *LinuxInspector) GetProcesses() (Processes, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error occured during process retrieval: %s", err)
 		}
+		l.lastLoadTime = time.Now()
 	}
 
 	if l.ps == nil {
@@ -144,6 +149,10 @@ func (l *LinuxInspector) GetProcesses() (Processes, error) {
 	}
 
 	return l.ps, nil
+}
+
+func (l *LinuxInspector) GetLastLoadTime() time.Time {
+	return l.lastLoadTime
 }
 
 // loadProcessesFromCache attempts to load processes from an existing cache on

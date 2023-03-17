@@ -13,6 +13,7 @@ import (
 	"github.com/arctir/proctor/platforms/github"
 	"github.com/arctir/proctor/plib"
 	"github.com/arctir/proctor/source"
+	"github.com/arctir/proctor/ui"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -29,6 +30,7 @@ const (
 //
 // [plib]: https://github.com/arctir/proctor/tree/main/plib
 func SetupCLI() *cobra.Command {
+	proctorCmd.AddCommand(uiCmd)
 	proctorCmd.AddCommand(processCmd)
 	proctorCmd.AddCommand(sourceCmd)
 	sourceCmd.AddCommand(commitCmd)
@@ -61,6 +63,12 @@ func runProcess(cmd *cobra.Command, args []string) {
 		cmd.Help()
 		os.Exit(0)
 	}
+}
+
+// runUI defines the behavior of running:
+// `proctor ui ...`
+func runUI(cmd *cobra.Command, args []string) {
+	ui.New().RunUI()
 }
 
 // runListProcesses defines the behavior of running:
