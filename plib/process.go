@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/adrg/xdg"
 )
@@ -93,6 +94,9 @@ type Inspector interface {
 	// return the result. Whether a new cache is formed in this situation is up
 	// to the implementator and, potentially, its configuration.
 	GetProcesses() (Processes, error)
+	// GetLastLoadTime returns the last time process information was captured
+	// by the inspector.
+	GetLastLoadTime() time.Time
 	// NOTE(joshrosso): I'm considering expansion of this interface over time.
 	// While it's compelling to include "helper" functions like GetProcessByName
 	// it also could cause an expansion of endless possibilities, when the point
