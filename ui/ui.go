@@ -14,118 +14,10 @@ import (
 )
 
 const (
-	port = ":8080"
+	port          = ":8080"
+	refreshPath   = "/refresh"
+	processesPath = "/process/"
 )
-
-const viewProcessDetails = `
-<html>
-	<head>
-
-	<style>
-		.buttons {
-			margin-bottom: 1rem;
-		}
-		button {
-			background-color: black;
-			color: white;
-			border: 1px solid black;
-			padding: 8px;
-			font-size: 16px;
-			cursor: pointer;
-		}
-		table {
-			border-collapse: collapse;
-			width: 100%;
-		}
-		th, td {
-			border: 1px solid black;
-			padding: 8px;
-			text-align: left;
-		}
-		th {
-			background-color: black;
-			color: white;
-		}
-	</style>
-		<title>Procotor display</title>
-	</head>
-	<body>
-		<div class="container">
-		<table>
-            <tr>
-                <th>Field</th>
-                <th>Value</th>
-            </tr>
-			{{range $idx, $value := . | pDeets }}
-            <tr>
-                <td>{{ $value.Field }}</td>
-                <td>{{ $value.Value }}</td>
-            </tr>
-			{{ end }}
-			</table>
-		</div>
-	</body>
-</html>
-`
-
-const view = `
-<html>
-	<head>
-
-	<style>
-		.buttons {
-			margin-bottom: 1rem;
-		}
-		button {
-			background-color: black;
-			color: white;
-			border: 1px solid black;
-			padding: 8px;
-			font-size: 16px;
-			cursor: pointer;
-		}
-		table {
-			border-collapse: collapse;
-			width: 100%;
-		}
-		th, td {
-			border: 1px solid black;
-			padding: 8px;
-			text-align: left;
-		}
-		th {
-			background-color: black;
-			color: white;
-		}
-	</style>
-		<title>Procotor display</title>
-	</head>
-	<body>
-		<div class="container">
-		<div class="status">
-		 <p>Last Refreshed: {{ .LastRefresh }}</p>
-		</div>
-		<div class="buttons">
-			<a href="/refresh"><button>Refresh</button></a>
-		</div>
-		<table>
-            <tr>
-                <th>PID</th>
-                <th>Name</th>
-                <th>SHA</th>
-            </tr>
-			{{range $key, $value := .PS}}
-            <tr>
-                <td>{{$key}}</td>
-				<td><a href="process/{{$key}}">{{.CommandName}}</a></td>
-                <td>{{.BinarySHA}}</td>
-            </tr>
-            {{end}}
-			</table>
-		</div>
-	</body>
-</html>
-`
 
 type UI struct {
 	inspector plib.Inspector
@@ -147,6 +39,7 @@ func New() *UI {
 	newInspector, err := plib.NewInspector()
 	newUI := UI{
 		inspector: newInspector,
+		data:      Data{},
 	}
 	if err != nil {
 		panic(err)
@@ -155,51 +48,66 @@ func New() *UI {
 }
 
 func (ui *UI) RunUI() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		var err error
-		ui.data.PS, err = ui.inspector.GetProcesses()
-		ui.data.LastRefresh = ui.inspector.GetLastLoadTime()
-
-		t := template.Must(template.New("map").Parse(view))
-		// Render the template with the data
-		err = t.Execute(w, ui.data)
-		if err != nil {
-			panic(err)
-		}
-	})
-
-	http.HandleFunc("/refresh", func(w http.ResponseWriter, r *http.Request) {
-		err := ui.inspector.ClearProcessCache()
-		if err != nil {
-			panic(err)
-		}
-		log.Println("refreshed process cache")
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-	})
-
-	http.HandleFunc("/process/", func(w http.ResponseWriter, r *http.Request) {
-		pidString := strings.TrimPrefix(r.URL.Path, "/process/")
-		pid, err := strconv.Atoi(pidString)
-		if err != nil {
-			panic(err)
-		}
-
-		t := template.Must(template.New("map").Funcs(template.FuncMap{"pDeets": getProcessDetails}).Parse(viewProcessDetails))
-		// Render the template with the data
-		if ui.data.PS == nil {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		err = t.Execute(w, ui.data.PS[pid])
-		if err != nil {
-			panic(err)
-		}
-	})
+	http.HandleFunc("/", ui.handleAllProcesses)
+	http.HandleFunc(refreshPath, ui.handleRefresh)
+	http.HandleFunc(processesPath, ui.handleProcessDetails)
 
 	log.Printf("serving at %s", port)
 	panic(http.ListenAndServe(port, nil))
 }
 
+func (ui *UI) handleAllProcesses(w http.ResponseWriter, r *http.Request) {
+	var err error
+	ui.data.PS, err = ui.inspector.GetProcesses()
+	ui.data.LastRefresh = ui.inspector.GetLastLoadTime()
+
+	t, err := createTemplate(allProcessesView)
+	if err != nil {
+		// TODO(joshross): do error response
+	}
+	// Render the template with the data
+	err = t.Execute(w, ui.data)
+	if err != nil {
+		writeFailure(w, err)
+	}
+}
+
+func (ui *UI) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	err := ui.inspector.ClearProcessCache()
+	if err != nil {
+		panic(err)
+	}
+	log.Println("refreshed process cache")
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (ui *UI) handleProcessDetails(w http.ResponseWriter, r *http.Request) {
+	pidString := strings.TrimPrefix(r.URL.Path, processesPath)
+	pid, err := strconv.Atoi(pidString)
+	if err != nil {
+		writeFailure(w, err)
+	}
+
+	// Render the template with the data
+	if ui.data.PS[pid] == nil {
+		writeFailure(w, fmt.Errorf("processes does not exist."))
+		return
+	}
+	t, err := createTemplate(viewProcessDetails)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	err = t.Execute(w, ui.data.PS[pid])
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+}
+
+// getProcessDetails returns a slice containing the key and value for each value
+// property. It does this by performing reflection and understanding what's
+// available on the [plib.Process].
 func getProcessDetails(process plib.Process) []DetailKV {
 	result := []DetailKV{}
 	t := reflect.TypeOf(process)
@@ -219,4 +127,20 @@ func getProcessDetails(process plib.Process) []DetailKV {
 	}
 
 	return result
+}
+
+// createTemplate returns a final template with your template (temp) specified
+// and wrapped with [UIHeader] and [UIFooter].
+func createTemplate(temp string) (*template.Template, error) {
+	t, err := template.New("response").Funcs(template.FuncMap{"pDeets": getProcessDetails}).Parse(uiHeader + temp + uiFooter)
+	if err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func writeFailure(w http.ResponseWriter, err error) {
+	w.WriteHeader(http.StatusInternalServerError)
+	t, _ := createTemplate(errorView)
+	t.Execute(w, err.Error())
 }
