@@ -410,7 +410,7 @@ func LoadProcessStat(procfsFp string, pid int, knownSHAs map[string]string) Proc
 		ParentProcess: stat.ParentID,
 		BinarySHA:     sha,
 		Type:          linuxProcessType,
-		OSSpecific:    &stat,
+		OSSpecific:    stat,
 	}
 
 	return p

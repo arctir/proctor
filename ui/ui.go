@@ -53,15 +53,16 @@ const viewProcessDetails = `
 		<div class="container">
 		<table>
             <tr>
-                <th>Command Name</th>
-                <th>Command Path</th>
+                <th>Field</th>
+                <th>Value</th>
             </tr>
+			{{range $idx, $value := . | pDeets }}
             <tr>
-                <td>{{ .CommandName }}</td>
-                <td>{{ .CommandPath }}</td>
+                <td>{{ $value.Field }}</td>
+                <td>{{ $value.Value }}</td>
             </tr>
+			{{ end }}
 			</table>
-			{{ . | pDeets }}
 		</div>
 	</body>
 </html>
@@ -136,6 +137,11 @@ type Data struct {
 	PS          plib.Processes
 }
 
+type DetailKV struct {
+	Field string
+	Value string
+}
+
 func New() *UI {
 	var err error
 	newInspector, err := plib.NewInspector()
@@ -180,6 +186,10 @@ func (ui *UI) RunUI() {
 
 		t := template.Must(template.New("map").Funcs(template.FuncMap{"pDeets": getProcessDetails}).Parse(viewProcessDetails))
 		// Render the template with the data
+		if ui.data.PS == nil {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		err = t.Execute(w, ui.data.PS[pid])
 		if err != nil {
 			panic(err)
@@ -190,14 +200,23 @@ func (ui *UI) RunUI() {
 	panic(http.ListenAndServe(port, nil))
 }
 
-func getProcessDetails(process plib.Process) string {
-	var details string
+func getProcessDetails(process plib.Process) []DetailKV {
+	result := []DetailKV{}
 	t := reflect.TypeOf(process)
 	v := reflect.ValueOf(process)
 	for i := 0; i < t.NumField(); i++ {
 		field := t.Field(i)
-		details += fmt.Sprintf("%s: %v", field.Name, v.Field(i).Interface())
+		if field.Name == "OSSpecific" {
+			continue
+		}
+		result = append(result, DetailKV{field.Name, fmt.Sprintf("%v", v.Field(i).Interface())})
 	}
-	fmt.Println(details)
-	return details
+	t = reflect.TypeOf(process.OSSpecific)
+	v = reflect.ValueOf(process.OSSpecific)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		result = append(result, DetailKV{field.Name, fmt.Sprintf("%v", v.Field(i).Interface())})
+	}
+
+	return result
 }
