@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -59,6 +61,7 @@ const viewProcessDetails = `
                 <td>{{ .CommandPath }}</td>
             </tr>
 			</table>
+			{{ . | pDeets }}
 		</div>
 	</body>
 </html>
@@ -175,7 +178,7 @@ func (ui *UI) RunUI() {
 			panic(err)
 		}
 
-		t := template.Must(template.New("map").Parse(viewProcessDetails))
+		t := template.Must(template.New("map").Funcs(template.FuncMap{"pDeets": getProcessDetails}).Parse(viewProcessDetails))
 		// Render the template with the data
 		err = t.Execute(w, ui.data.PS[pid])
 		if err != nil {
@@ -185,4 +188,16 @@ func (ui *UI) RunUI() {
 
 	log.Printf("serving at %s", port)
 	panic(http.ListenAndServe(port, nil))
+}
+
+func getProcessDetails(process plib.Process) string {
+	var details string
+	t := reflect.TypeOf(process)
+	v := reflect.ValueOf(process)
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+		details += fmt.Sprintf("%s: %v", field.Name, v.Field(i).Interface())
+	}
+	fmt.Println(details)
+	return details
 }
