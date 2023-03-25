@@ -10,6 +10,12 @@ var proctorCmd = &cobra.Command{
 	Run:   runProctor,
 }
 
+var uiCmd = &cobra.Command{
+	Use:   "ui",
+	Short: "Run the web-based UI",
+	Run:   runUI,
+}
+
 var processCmd = &cobra.Command{
 	Use:     "process",
 	Aliases: []string{"ps"},
