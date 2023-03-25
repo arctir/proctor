@@ -29,6 +29,60 @@ const uiHeader = `
 			background-color: black;
 			color: white;
 		}
+		.tree-wrapper {
+			padding-top: 10px;
+		  }
+		  
+		  .tree-list {
+			list-style: none;
+			padding: 0;
+			margin: 0;
+		  }
+		  .tree-list .tree-item {
+			position: relative;
+			display: block;
+			min-height: 2em;
+			line-height: 2em;
+			margin-bottom: 10px;
+			padding-left: 21px;
+		  }
+		  .tree-list .tree-item:before, .tree-list .tree-item:after {
+			content: "";
+			position: absolute;
+			display: block;
+			background-color: #333;
+		  }
+		  .tree-list .tree-item:before {
+			top: 0;
+			left: 10px;
+			width: 1px;
+			height: calc(100% + 10px);
+		  }
+		  .tree-list .tree-item:after {
+			top: 1em;
+			left: 10px;
+			width: 11px;
+			height: 1px;
+		  }
+		  .tree-list .tree-item:last-child {
+			margin-bottom: 0;
+		  }
+		  .tree-list .tree-item:last-child:before {
+			height: 1em;
+		  }
+		  .tree-list .tree-item:first-child:before {
+			top: -10px;
+			height: calc(100% + 20px);
+		  }
+		  .tree-list .tree-item > span {
+			display: inline-block;
+			padding: 0 5px;
+			border: 1px solid #333;
+		  }
+		  .tree-list .tree-item > .tree-list {
+			padding-top: 10px;
+		  }
+		
 	</style>
 		<title>Procotor display</title>
 	</head>
@@ -42,6 +96,10 @@ const uiFooter = `
 
 const viewProcessDetails = `
 		<div class="container">
+		<div class="buttons">
+			<a href="/"><button>All Processes</button></a>
+			<a href="/tree/{{ .ID }}"><button>Process Hierarchy</button></a>
+		</div>
 		<table>
             <tr>
                 <th>Field</th>
@@ -54,6 +112,26 @@ const viewProcessDetails = `
             </tr>
 			{{ end }}
 			</table>
+		</div>
+`
+
+const viewTreeDetails = `
+		<div class="container">
+		<div class="buttons">
+			<a href="/"><button>All Processes</button></a>
+		</div>
+			<div class="tree-wrapper">
+
+		  	    {{ range $value := . }}
+				<ul class="tree-list">
+					<li class="tree-item has-sub">
+						<span><a href="/process/{{ .ID }}">{{ .CommandName }} ({{ .ID }})</a></span>
+				{{ end }}
+		  	    {{ range . }}
+					</ul>
+				</li>
+				{{ end }}
+			</div>
 		</div>
 `
 
@@ -85,7 +163,7 @@ const allProcessesView = `
 const errorView = `
 		<div class="container">
 			<div class="status">
-			<h1>Failed retrieving page! 404.</h1>
+			<h1>Failed creating requested page.</h1>
 			<p>Error details {{ . }}</p>
 			</div>
 		</div>

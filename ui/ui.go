@@ -8,20 +8,23 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/arctir/proctor/plib"
 )
 
 const (
-	port          = ":8080"
-	refreshPath   = "/refresh"
-	processesPath = "/process/"
+	port              = ":8080"
+	refreshPath       = "/refresh"
+	processesPath     = "/process/"
+	processesTreePath = "/tree/"
 )
 
 type UI struct {
-	inspector plib.Inspector
-	data      Data
+	inspector   plib.Inspector
+	data        Data
+	refreshLock sync.Mutex
 }
 
 type Data struct {
@@ -38,8 +41,9 @@ func New() *UI {
 	var err error
 	newInspector, err := plib.NewInspector()
 	newUI := UI{
-		inspector: newInspector,
-		data:      Data{},
+		inspector:   newInspector,
+		data:        Data{},
+		refreshLock: sync.Mutex{},
 	}
 	if err != nil {
 		panic(err)
@@ -51,16 +55,18 @@ func (ui *UI) RunUI() {
 	http.HandleFunc("/", ui.handleAllProcesses)
 	http.HandleFunc(refreshPath, ui.handleRefresh)
 	http.HandleFunc(processesPath, ui.handleProcessDetails)
+	http.HandleFunc(processesTreePath, ui.handleProcessTree)
 
 	log.Printf("serving at %s", port)
 	panic(http.ListenAndServe(port, nil))
 }
 
 func (ui *UI) handleAllProcesses(w http.ResponseWriter, r *http.Request) {
+	ui.refreshLock.Lock()
+	defer ui.refreshLock.Unlock()
 	var err error
 	ui.data.PS, err = ui.inspector.GetProcesses()
 	ui.data.LastRefresh = ui.inspector.GetLastLoadTime()
-
 	t, err := createTemplate(allProcessesView)
 	if err != nil {
 		// TODO(joshross): do error response
@@ -73,6 +79,8 @@ func (ui *UI) handleAllProcesses(w http.ResponseWriter, r *http.Request) {
 }
 
 func (ui *UI) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	ui.refreshLock.Lock()
+	defer ui.refreshLock.Unlock()
 	err := ui.inspector.ClearProcessCache()
 	if err != nil {
 		panic(err)
@@ -86,6 +94,7 @@ func (ui *UI) handleProcessDetails(w http.ResponseWriter, r *http.Request) {
 	pid, err := strconv.Atoi(pidString)
 	if err != nil {
 		writeFailure(w, err)
+		return
 	}
 
 	// Render the template with the data
@@ -103,6 +112,32 @@ func (ui *UI) handleProcessDetails(w http.ResponseWriter, r *http.Request) {
 		writeFailure(w, err)
 		return
 	}
+}
+func (ui *UI) handleProcessTree(w http.ResponseWriter, r *http.Request) {
+	pidString := strings.TrimPrefix(r.URL.Path, processesTreePath)
+	pid, err := strconv.Atoi(pidString)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+
+	// Render the template with the data
+	if ui.data.PS[pid] == nil {
+		writeFailure(w, fmt.Errorf("processes does not exist."))
+		return
+	}
+	hierarchy := getProcessHierarchy(ui.data.PS, pid)
+	t, err := createTemplate(viewTreeDetails)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+	err = t.Execute(w, hierarchy)
+	if err != nil {
+		writeFailure(w, err)
+		return
+	}
+
 }
 
 // getProcessDetails returns a slice containing the key and value for each value
@@ -129,10 +164,31 @@ func getProcessDetails(process plib.Process) []DetailKV {
 	return result
 }
 
+// getProcessHierarchy returns a list of processes starting with the most child
+// and ending with the most parent. The most child will be the defined by the
+// pid argument.
+func getProcessHierarchy(processes plib.Processes, pid int) []plib.Process {
+	result := []plib.Process{}
+
+	currentProcess := *processes[pid]
+	for {
+		result = append(result, currentProcess)
+		if parentProcess, ok := processes[currentProcess.ParentProcess]; ok {
+			currentProcess = *parentProcess
+		} else {
+			break
+		}
+	}
+
+	return result
+}
+
 // createTemplate returns a final template with your template (temp) specified
 // and wrapped with [UIHeader] and [UIFooter].
 func createTemplate(temp string) (*template.Template, error) {
-	t, err := template.New("response").Funcs(template.FuncMap{"pDeets": getProcessDetails}).Parse(uiHeader + temp + uiFooter)
+	t, err := template.New("response").
+		Funcs(template.FuncMap{"pDeets": getProcessDetails}).
+		Parse(uiHeader + temp + uiFooter)
 	if err != nil {
 		return nil, err
 	}
